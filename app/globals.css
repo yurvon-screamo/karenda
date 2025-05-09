@@ -2,26 +2,267 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@layer base {
+  :root {
+    /* Светлая тема */
+    --background: 0 0% 100%;
+    --foreground: 260 20% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 260 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 260 20% 10%;
+
+    --primary: 280 70% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 260 30% 90%;
+    --secondary-foreground: 260 20% 10%;
+
+    --muted: 260 30% 90%;
+    --muted-foreground: 260 20% 40%;
+
+    --accent: 280 30% 90%;
+    --accent-foreground: 260 20% 10%;
+
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 260 30% 80%;
+    --input: 260 30% 90%;
+    --ring: 280 70% 50%;
+  }
+
+  .dark {
+    /* Темная тема */
+    --background: 260 20% 10%;
+    --foreground: 210 40% 98%;
+
+    --card: 260 20% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 260 20% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 280 70% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 260 30% 20%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 260 30% 20%;
+    --muted-foreground: 215 20% 75%;
+
+    --accent: 280 30% 30%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 260 30% 30%;
+    --input: 260 30% 20%;
+    --ring: 280 70% 60%;
+  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
+  color: hsl(var(--foreground));
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: hsl(var(--background));
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+/* Стили для форм и элементов ввода */
+.dark input[type="date"],
+.dark input[type="time"] {
+  color-scheme: dark;
+}
+
+.light input[type="date"],
+.light input[type="time"] {
+  color-scheme: light;
+}
+
+/* Унифицированные стили для всех дроверов */
+.drawer-content,
+.side-drawer {
+  color: hsl(var(--foreground));
+  background: linear-gradient(
+    135deg,
+    hsl(var(--background) / 0.95),
+    hsl(var(--background) / 0.9),
+    hsl(var(--background) / 0.95)
+  );
+  backdrop-filter: blur(10px);
+  border-color: hsl(var(--primary) / 0.2);
+}
+
+/* Унифицированные стили для всех кнопок */
+.btn-primary {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-radius: 9999px;
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1px solid hsl(var(--primary) / 0.3);
+  color: hsl(var(--foreground));
+  border-radius: 9999px;
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: hsl(var(--foreground));
+  border-radius: 9999px;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
+/* Стили для выпадающих списков */
+.select-content {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--background) / 0.95),
+    hsl(var(--background) / 0.9),
+    hsl(var(--background) / 0.95)
+  );
+  border: 1px solid hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
+}
+
+/* Стили для анимаций */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Стили для мобильных устройств */
+@media (max-width: 768px) {
+  .calendar-container {
+    flex-direction: column;
+  }
+
+  .calendar-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid hsl(var(--primary) / 0.2);
+  }
+
+  .calendar-content {
+    width: 100%;
+  }
+}
+
+/* Стили для фона приложения */
+.app-background {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--background) / 0.7),
+    hsl(var(--primary) / 0.1),
+    hsl(var(--background) / 0.7)
+  );
+  backdrop-filter: blur(20px);
+}
+
+/* Унифицированные стили для полей ввода */
+.input-field {
+  background-color: hsl(var(--input) / 0.8);
+  border: 1px solid hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
+  border-radius: 0.5rem;
+}
+
+.input-field:focus {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2);
+}
+
+/* Стили для текстовых областей */
+.textarea-field {
+  background-color: hsl(var(--input) / 0.8);
+  border: 1px solid hsl(var(--primary) / 0.2);
+  color: hsl(var(--foreground));
+  border-radius: 0.5rem;
+  min-height: 100px;
+}
+
+/* Стили для перетаскиваемых элементов */
+.draggable {
+  cursor: grab;
+}
+
+.draggable:active {
+  cursor: grabbing;
+}
+
+.drag-over {
+  background-color: hsl(var(--primary) / 0.2);
+  border-color: hsl(var(--primary));
+}
+
+.dragging {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+/* Анимация для индикатора перетаскивания */
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+.drag-indicator {
+  animation: pulse 1.5s infinite;
+}
+
+/* Стили для кастомного скроллбара */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.2);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted) / 0.4);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted) / 0.6);
+}
+
+/* Для Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted) / 0.4) hsl(var(--muted) / 0.2);
 }
