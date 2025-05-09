@@ -4,10 +4,10 @@ import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
 import { Trash2, X, Save, GripVertical, Repeat, Pencil } from "lucide-react"
-import { Button } from "./button"
-import { Input } from "./input"
-import { Textarea } from "./textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select"
+import { Button } from "../ui/button"
+import { Input } from "../ui/input"
+import { Textarea } from "../ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { cn } from "@/lib/utils"
 import {
   Drawer,
@@ -17,16 +17,132 @@ import {
   DrawerBody,
   DrawerFooter,
   DrawerClose,
-} from "./drawer"
-import { CalendarSyncManager } from "./calendar-sync-manager"
+} from "@/components/ui"
+import { CalendarSyncManager } from "@/components/sync/calendar-sync-manager"
 import { useToast } from "@/hooks/use-toast"
-import { Switch } from "./switch"
-import { Label } from "./label"
-import { DayTasks } from "./day-tasks"
+import { Switch } from "@/components/ui"
+import { Label } from "@/components/ui"
+import { DayTasks } from "@/components/calendar/day-tasks"
 import { CalendarEvent } from "@/lib/types"
 
+// Константы
 const SLOT_HEIGHT = 0.75 // px за минуту
 const EMPTY_SLOT_HEIGHT = 12 // px
+
+const WEEKDAYS = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"]
+const MONTH_NAMES = [
+  "Января", "Февраля", "Марта", "Апреля", "Мая", "Июня",
+  "Июля", "Августа", "Сентября", "Октября", "Ноября", "Декабря"
+]
+
+// Утилиты для работы с событиями
+const eventUtils = {
+  formatHour: (hour: number): string => {
+    return `${hour.toString().padStart(2, "0")}:00`
+  },
+
+  formatTimeWithAmPm: (time: string): string => {
+    const [hours, minutes] = time.split(":").map(Number)
+
+    if (hours === 0) {
+      return `12:${minutes.toString().padStart(2, "0")} AM`
+    } else if (hours < 12) {
+      return `${hours}:${minutes.toString().padStart(2, "0")} AM`
+    } else if (hours === 12) {
+      return `12:${minutes.toString().padStart(2, "0")} PM`
+    } else {
+      return `${hours - 12}:${minutes.toString().padStart(2, "0")} PM`
+    }
+  },
+
+  formatDuration: (durationMinutes: number): string => {
+    const hours = Math.floor(durationMinutes / 60)
+    const minutes = durationMinutes % 60
+
+    if (hours === 0) {
+      return `${minutes} минут`
+    } else if (minutes === 0) {
+      return hours === 1 ? `${hours} час` : hours < 5 ? `${hours} часа` : `${hours} часов`
+    } else {
+      const hoursText = hours === 1 ? `${hours} час` : hours < 5 ? `${hours} часа` : `${hours} часов`
+      return `${hoursText} ${minutes} минут`
+    }
+  },
+
+  formatRecurrenceType: (type: string): string => {
+    switch (type) {
+      case "daily":
+        return "Ежедневно"
+      case "weekly":
+        return "Еженедельно"
+      case "weekdays":
+        return "По рабочим дням"
+      case "monthly":
+        return "Ежемесячно"
+      default:
+        return "Не повторяется"
+    }
+  },
+
+  groupEventsByTime: (events: CalendarEvent[]): CalendarEvent[][] => {
+    const sortedEvents = [...events].sort((a, b) => {
+      const [aHour, aMinute] = a.time.split(":").map(Number)
+      const [bHour, bMinute] = b.time.split(":").map(Number)
+      return (aHour * 60 + aMinute) - (bHour * 60 + bMinute)
+    })
+
+    const groups: CalendarEvent[][] = []
+    let currentGroup: CalendarEvent[] = []
+
+    sortedEvents.forEach(event => {
+      const [eventHour, eventMinute] = event.time.split(":").map(Number)
+      const eventStartMinutes = eventHour * 60 + eventMinute
+      const eventEndMinutes = eventStartMinutes + (event.duration || 60)
+
+      const overlapsWithGroup = currentGroup.some(groupEvent => {
+        const [groupHour, groupMinute] = groupEvent.time.split(":").map(Number)
+        const groupStartMinutes = groupHour * 60 + groupMinute
+        const groupEndMinutes = groupStartMinutes + (groupEvent.duration || 60)
+
+        return (
+          (eventStartMinutes >= groupStartMinutes && eventStartMinutes < groupEndMinutes) ||
+          (eventEndMinutes > groupStartMinutes && eventEndMinutes <= groupEndMinutes) ||
+          (eventStartMinutes <= groupStartMinutes && eventEndMinutes >= groupEndMinutes)
+        )
+      })
+
+      if (overlapsWithGroup) {
+        currentGroup.push(event)
+      } else {
+        if (currentGroup.length > 0) {
+          groups.push(currentGroup)
+        }
+        currentGroup = [event]
+      }
+    })
+
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup)
+    }
+
+    return groups
+  },
+
+  getEventPosition: (event: CalendarEvent, group: CalendarEvent[]) => {
+    const [eventHour, eventMinute] = event.time.split(":").map(Number)
+    const duration = event.duration || 60
+    const top = eventHour * 60 * SLOT_HEIGHT + eventMinute * SLOT_HEIGHT
+    const height = duration * SLOT_HEIGHT
+
+    const index = group.findIndex(e => e.id === event.id)
+    const totalEvents = group.length
+
+    const width = `${100 / totalEvents}%`
+    const left = `${(index * 100) / totalEvents}%`
+
+    return { top, height, width, left }
+  }
+}
 
 interface EventDetailsProps {
   selectedDate: Date
@@ -62,11 +178,11 @@ export function EventDetails({
     title: "",
     date: "",
     time: "",
-    timeFormat: "AM", // AM или PM
-    duration: "60", // в минутах
+    timeFormat: "AM",
+    duration: "60",
     description: "",
     isRecurring: false,
-    recurrenceType: "daily", // daily, weekly, weekdays, monthly
+    recurrenceType: "daily",
     recurrenceEndDate: "",
   })
   const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null)
@@ -74,33 +190,15 @@ export function EventDetails({
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null)
   const { toast } = useToast()
 
-  // Ref для отслеживания начальной позиции перетаскивания
+  // Refs для отслеживания перетаскивания
   const dragStartY = useRef<number>(0)
   const draggedEventInitialHour = useRef<number>(0)
-
-  // Флаг для отслеживания drag vs click
   const wasDrag = useRef(false)
 
-  const weekdays = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"]
-  const monthNames = [
-    "Января",
-    "Февраля",
-    "Марта",
-    "Апреля",
-    "Мая",
-    "Июня",
-    "Июля",
-    "Августа",
-    "Сентября",
-    "Октября",
-    "Ноября",
-    "Декабря",
-  ]
-
-  const formattedDate = `${selectedDate.getDate()} ${monthNames[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`
+  const formattedDate = `${selectedDate.getDate()} ${MONTH_NAMES[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`
 
   // Получаем события на выбранную дату
-  const dayEvents = events.filter((event) => {
+  const dayEvents = events.filter(event => {
     const eventDate = new Date(event.date)
     return (
       eventDate.getDate() === selectedDate.getDate() &&
@@ -109,7 +207,7 @@ export function EventDetails({
     )
   })
 
-  // Создаем массив слотов по 15 минут (96 слотов в сутки)
+  // Создаем массив слотов по 15 минут
   const slots = Array.from({ length: 96 }, (_, i) => i)
 
   // Получаем события, которые начинаются в этот день
@@ -118,143 +216,20 @@ export function EventDetails({
     return eventHour >= 0 && eventHour < 24
   })
 
-  // Группируем события по времени начала и перекрытиям
-  const groupEventsByTime = (events: CalendarEvent[]) => {
-    // Сортируем события по времени начала
-    const sortedEvents = [...events].sort((a, b) => {
-      const [aHour, aMinute] = a.time.split(":").map(Number)
-      const [bHour, bMinute] = b.time.split(":").map(Number)
-      return (aHour * 60 + aMinute) - (bHour * 60 + bMinute)
-    })
-
-    const groups: CalendarEvent[][] = []
-    let currentGroup: CalendarEvent[] = []
-
-    sortedEvents.forEach(event => {
-      const [eventHour, eventMinute] = event.time.split(":").map(Number)
-      const eventStartMinutes = eventHour * 60 + eventMinute
-      const eventEndMinutes = eventStartMinutes + (event.duration || 60)
-
-      // Проверяем, перекрывается ли событие с текущей группой
-      const overlapsWithGroup = currentGroup.some(groupEvent => {
-        const [groupHour, groupMinute] = groupEvent.time.split(":").map(Number)
-        const groupStartMinutes = groupHour * 60 + groupMinute
-        const groupEndMinutes = groupStartMinutes + (groupEvent.duration || 60)
-
-        return (
-          (eventStartMinutes >= groupStartMinutes && eventStartMinutes < groupEndMinutes) ||
-          (eventEndMinutes > groupStartMinutes && eventEndMinutes <= groupEndMinutes) ||
-          (eventStartMinutes <= groupStartMinutes && eventEndMinutes >= groupEndMinutes)
-        )
-      })
-
-      if (overlapsWithGroup) {
-        currentGroup.push(event)
-      } else {
-        if (currentGroup.length > 0) {
-          groups.push(currentGroup)
-        }
-        currentGroup = [event]
-      }
-    })
-
-    if (currentGroup.length > 0) {
-      groups.push(currentGroup)
-    }
-
-    return groups
-  }
-
-  // Вычисляем позицию события в группе
-  const getEventPosition = (event: CalendarEvent, group: CalendarEvent[]) => {
-    const [eventHour, eventMinute] = event.time.split(":").map(Number)
-    const duration = event.duration || 60
-    const top = eventHour * 60 * SLOT_HEIGHT + eventMinute * SLOT_HEIGHT
-    const height = duration * SLOT_HEIGHT
-
-    // Находим индекс события в группе
-    const index = group.findIndex(e => e.id === event.id)
-    const totalEvents = group.length
-
-    // Вычисляем ширину и отступ слева для события
-    const width = `${100 / totalEvents}%`
-    const left = `${(index * 100) / totalEvents}%`
-
-    return { top, height, width, left }
-  }
-
-  // Форматируем час в формате "00:00"
-  const formatHour = (hour: number) => {
-    return `${hour.toString().padStart(2, "0")}:00`
-  }
-
-  // Форматируем время в 12-часовом формате с AM/PM
-  const formatTimeWithAmPm = (time: string) => {
-    const [hours, minutes] = time.split(":").map(Number)
-
-    if (hours === 0) {
-      return `12:${minutes.toString().padStart(2, "0")} AM`
-    } else if (hours < 12) {
-      return `${hours}:${minutes.toString().padStart(2, "0")} AM`
-    } else if (hours === 12) {
-      return `12:${minutes.toString().padStart(2, "0")} PM`
-    } else {
-      return `${hours - 12}:${minutes.toString().padStart(2, "0")} PM`
-    }
-  }
-
-  // Форматируем длительность для отображения
-  const formatDuration = (durationMinutes: number) => {
-    const hours = Math.floor(durationMinutes / 60)
-    const minutes = durationMinutes % 60
-
-    if (hours === 0) {
-      return `${minutes} минут`
-    } else if (minutes === 0) {
-      return hours === 1 ? `${hours} час` : hours < 5 ? `${hours} часа` : `${hours} часов`
-    } else {
-      const hoursText = hours === 1 ? `${hours} час` : hours < 5 ? `${hours} часа` : `${hours} часов`
-      return `${hoursText} ${minutes} минут`
-    }
-  }
-
-  // Форматируем тип повторения для отображения
-  const formatRecurrenceType = (type: string) => {
-    switch (type) {
-      case "daily":
-        return "Ежедневно"
-      case "weekly":
-        return "Еженедельно"
-      case "weekdays":
-        return "По рабочим дням"
-      case "monthly":
-        return "Ежемесячно"
-      default:
-        return "Не повторяется"
-    }
-  }
-
-  // Обработчик клика по событию
+  // Обработчики событий
   const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
-    // Предотвращаем открытие редактора при клике на событие
     e.stopPropagation()
   }
 
-  // Обработчик редактирования события
   const handleEditEvent = (event: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation()
     setCurrentEvent(event)
     setIsEditing(true)
     setIsDrawerOpen(true)
 
-    // Заполняем форму данными события
     const eventDate = new Date(event.date)
-
-    // Определяем формат времени (AM/PM)
     const [hours] = event.time.split(":").map(Number)
     const timeFormat = hours < 12 ? "AM" : "PM"
-
-    // Формируем дату окончания повторения, если она есть
     const recurrenceEndDate = event.recurrenceEndDate
       ? new Date(event.recurrenceEndDate).toISOString().split("T")[0]
       : ""
@@ -274,17 +249,14 @@ export function EventDetails({
     })
   }
 
-  // Обработчик создания нового события
   const handleCreateEvent = () => {
     setCurrentEvent(null)
     setIsEditing(true)
     setIsDrawerOpen(true)
 
-    // Определяем формат времени для текущего часа
     const currentHour = new Date().getHours()
     const timeFormat = currentHour < 12 ? "AM" : "PM"
 
-    // Заполняем форму данными текущей даты
     setFormData({
       title: "",
       date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(
@@ -300,21 +272,15 @@ export function EventDetails({
     })
   }
 
-  // Обработчик создания нового события на указанное время
   const handleCreateEventAtTime = (hour: number, minutes: number) => {
     setCurrentEvent(null)
     setIsEditing(true)
     setIsDrawerOpen(true)
 
-    // Форматируем время в формате "HH:MM"
     const formattedHour = hour.toString().padStart(2, "0")
     const formattedTime = `${formattedHour}:${minutes.toString().padStart(2, "0")}`
+    const timeFormat = hour < 12 ? "AM" : "PM"
 
-    // Определяем формат времени (AM/PM)
-    const hourNumber = Number(formattedTime.split(":")[0]);
-    const timeFormat = hourNumber < 12 ? "AM" : "PM";
-
-    // Заполняем форму данными текущей даты и указанным временем
     setFormData({
       title: "",
       date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(
@@ -330,25 +296,20 @@ export function EventDetails({
     })
   }
 
-  // Обработчик изменения полей формы
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  // Обработчик изменения выпадающих списков
   const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  // Обработчик изменения переключателя
   const handleSwitchChange = (name: string, checked: boolean) => {
-    setFormData((prev) => ({ ...prev, [name]: checked }))
+    setFormData(prev => ({ ...prev, [name]: checked }))
   }
 
-  // Обработчик сохранения события
   const handleSaveEvent = () => {
-    // Создаем объект события из данных формы
     const [hours, minutes] = formData.time.split(":").map(Number)
     const eventDate = new Date(formData.date)
     eventDate.setHours(hours, minutes, 0, 0)
@@ -364,7 +325,6 @@ export function EventDetails({
         recurrenceType: formData.recurrenceType as 'daily' | 'weekly' | 'weekdays' | 'monthly',
         recurrenceEndDate: formData.recurrenceEndDate ? new Date(formData.recurrenceEndDate).toISOString() : undefined,
       }),
-      // Сохраняем дополнительные свойства из текущего события
       ...(currentEvent && {
         source: currentEvent.source,
         fromTask: currentEvent.fromTask,
@@ -372,94 +332,66 @@ export function EventDetails({
       }),
     }
 
-    // Обновляем список событий
     if (currentEvent) {
-      // Редактирование существующего события
-      const updatedEvents = events.map((event) =>
+      const updatedEvents = events.map(event =>
         event.id === currentEvent.id ? newEvent : event
       )
       onUpdateEvents(updatedEvents)
     } else {
-      // Создание нового события
       onUpdateEvents([...events, newEvent])
     }
 
-    // Показываем уведомление
     toast({
       title: currentEvent ? "Событие обновлено" : "Событие создано",
       description: `${newEvent.title} ${currentEvent ? "обновлено" : "добавлено"} в календарь`,
     })
 
-    // Закрываем дровер
     setIsDrawerOpen(false)
     setCurrentEvent(null)
   }
 
-  // Обработчик удаления события
   const handleDeleteEvent = () => {
     if (!currentEvent) return
 
-    // Удаляем событие из списка
-    const updatedEvents = events.filter((event) => event.id !== currentEvent.id)
+    const updatedEvents = events.filter(event => event.id !== currentEvent.id)
     onUpdateEvents(updatedEvents)
 
-    // Показываем уведомление
     toast({
       title: "Событие удалено",
       description: `${currentEvent.title} удалено из календаря`,
     })
 
-    // Закрываем дровер
     setIsDrawerOpen(false)
   }
 
-  // Закрытие дровера
   const handleCloseDrawer = () => {
     setIsDrawerOpen(false)
   }
 
-  // Обработчик начала перетаскивания события
+  // Обработчики drag & drop
   const handleDragStart = (event: CalendarEvent | null, e: React.DragEvent) => {
     e.stopPropagation()
-
-    // Сохраняем начальную позицию перетаскивания
     dragStartY.current = e.clientY
-
-    // Получаем час события
     const [eventHour] = event?.time.split(":").map(Number) || [0]
     draggedEventInitialHour.current = eventHour
-
-    // Устанавливаем перетаскиваемое событие
     setDraggedEvent(event)
     onDragStart(event)
-
-    // Устанавливаем данные для перетаскивания
     e.dataTransfer.setData("text/plain", String(event?.id || ''))
-
-    // Устанавливаем эффект перетаскивания
     e.dataTransfer.effectAllowed = "move"
-
-    // Добавляем прозрачность элементу при перетаскивании
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = "0.5"
     }
   }
 
-  // Обработчик начала перетаскивания задачи
   const handleTaskDragStart = (task: any) => {
     setDraggedTask(task)
   }
 
-  // Обработчик окончания перетаскивания
   const handleDragEnd = (e: React.DragEvent) => {
     e.stopPropagation()
-
-    // Восстанавливаем прозрачность элемента
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = "1"
     }
-
-    // Если нет перетаскиваемого события или нет целевого слота, отменяем
     if (!draggedEvent || dragOverSlot === null) {
       setDraggedEvent(null)
       onDragStart(null)
@@ -467,36 +399,29 @@ export function EventDetails({
       return
     }
 
-    // Получаем текущие минуты события
-    const [currentHours, currentMinutes] = draggedEvent.time.split(":").map(Number)
-
-    // Обновляем время события через родительский компонент
     const hour = Math.floor(dragOverSlot / 4)
     const minute = (dragOverSlot % 4) * 15
     onUpdateEventTime(draggedEvent, hour, minute)
 
-    // Показываем уведомление об успешном перемещении
     toast({
       title: "Событие перемещено",
-      description: `Событие "${draggedEvent.title}" перемещено на ${formatHour(hour)}:${minute.toString().padStart(2, "0")}`,
+      description: `Событие "${draggedEvent.title}" перемещено на ${eventUtils.formatHour(hour)}:${minute.toString().padStart(2, "0")}`,
     })
 
-    // Сбрасываем состояние перетаскивания
     setDraggedEvent(null)
     onDragStart(null)
     setDragOverSlot(null)
     setDraggedTask(null)
   }
 
-  // Добавляем компонент индикатора текущего времени
+  // Компонент индикатора текущего времени
   function CurrentTimeIndicator() {
     const [currentTime, setCurrentTime] = useState(new Date())
 
     useEffect(() => {
       const timer = setInterval(() => {
         setCurrentTime(new Date())
-      }, 60000) // Обновляем каждую минуту
-
+      }, 60000)
       return () => clearInterval(timer)
     }, [])
 
@@ -537,7 +462,7 @@ export function EventDetails({
         <div className="flex-1"></div>
         <div className="flex flex-col items-center justify-center">
           <div className="text-6xl font-light leading-none">{selectedDate.getDate()}</div>
-          <div className="text-xl mt-1">{weekdays[selectedDate.getDay()]}</div>
+          <div className="text-xl mt-1">{WEEKDAYS[selectedDate.getDay()]}</div>
         </div>
         <div className="flex-1 flex justify-end">
           <CalendarSyncManager onSyncComplete={onSyncComplete} />
@@ -570,94 +495,82 @@ export function EventDetails({
                     width: '100%',
                     textAlign: 'right',
                     paddingRight: '8px',
-                    fontSize: '0.75rem', // Уменьшаем размер шрифта
+                    fontSize: '0.75rem',
                   }}
                 >
-                  {formatHour(hour)}
+                  {eventUtils.formatHour(hour)}
                 </div>
               )
             })}
           </div>
+
           {/* Правая колонка — слоты и события */}
           <div
             className="flex-1 relative"
             onDragOver={e => {
-              e.preventDefault();
-              const rect = e.currentTarget.getBoundingClientRect();
-              const y = e.clientY - rect.top;
+              e.preventDefault()
+              const rect = e.currentTarget.getBoundingClientRect()
+              const y = e.clientY - rect.top
 
-              // Автоматический скроллинг при перетаскивании
-              const scrollContainer = e.currentTarget.parentElement;
+              const scrollContainer = e.currentTarget.parentElement
               if (scrollContainer) {
-                const scrollThreshold = 100; // пиксели от края для начала скроллинга
-                const scrollSpeed = 10; // скорость скроллинга
+                const scrollThreshold = 100
+                const scrollSpeed = 10
 
-                // Скроллим вниз если близко к нижнему краю
                 if (rect.bottom - e.clientY < scrollThreshold) {
-                  scrollContainer.scrollTop += scrollSpeed;
+                  scrollContainer.scrollTop += scrollSpeed
                 }
-                // Скроллим вверх если близко к верхнему краю
                 if (e.clientY - rect.top < scrollThreshold) {
-                  scrollContainer.scrollTop -= scrollSpeed;
+                  scrollContainer.scrollTop -= scrollSpeed
                 }
               }
 
-              // Вычисляем точный слот с учетом высоты слота
-              const slot = Math.round(y / (15 * SLOT_HEIGHT));
-              setDragOverSlot(slot);
+              const slot = Math.round(y / (15 * SLOT_HEIGHT))
+              setDragOverSlot(slot)
             }}
             onDrop={e => {
-              e.preventDefault();
+              e.preventDefault()
               if (draggedEvent && dragOverSlot !== null) {
-                // Вычисляем точное время из позиции перетаскивания
-                const slotMinutes = dragOverSlot * 15;
-                const hour = Math.floor(slotMinutes / 60);
-                const minute = slotMinutes % 60;
+                const slotMinutes = dragOverSlot * 15
+                const hour = Math.floor(slotMinutes / 60)
+                const minute = slotMinutes % 60
+                onUpdateEventTime(draggedEvent, hour, minute)
 
-                // Обновляем время события
-                onUpdateEventTime(draggedEvent, hour, minute);
-
-                // Показываем уведомление
                 toast({
                   title: "Событие перемещено",
                   description: `Событие "${draggedEvent.title}" перемещено на ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
-                });
+                })
 
-                // Сбрасываем состояние
-                setDraggedEvent(null);
-                setDragOverSlot(null);
-                onDragStart(null);
+                setDraggedEvent(null)
+                setDragOverSlot(null)
+                onDragStart(null)
               } else if (draggedTask && dragOverSlot !== null) {
-                // Превращаем задачу в событие
-                const slotMinutes = dragOverSlot * 15;
-                const hour = Math.floor(slotMinutes / 60);
-                const minute = slotMinutes % 60;
-                onConvertTaskToEvent(draggedTask, hour, minute);
+                const slotMinutes = dragOverSlot * 15
+                const hour = Math.floor(slotMinutes / 60)
+                const minute = slotMinutes % 60
+                onConvertTaskToEvent(draggedTask, hour, minute)
 
-                // Сбрасываем ВСЕ состояния после создания события
-                setDraggedTask(null);
-                setDragOverSlot(null);
-                setDraggedEvent(null);
-                onDragStart(null);
+                setDraggedTask(null)
+                setDragOverSlot(null)
+                setDraggedEvent(null)
+                onDragStart(null)
               }
             }}
             onDragLeave={e => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = e.clientX;
-              const y = e.clientY;
+              const rect = e.currentTarget.getBoundingClientRect()
+              const x = e.clientX
+              const y = e.clientY
               if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-                setDragOverSlot(null);
+                setDragOverSlot(null)
               }
             }}
             style={{ height: `${24 * 60 * SLOT_HEIGHT}px` }}
           >
-            {/* Добавляем индикатор текущего времени */}
             <CurrentTimeIndicator />
 
-            {/* События поверх слотов */}
-            {groupEventsByTime(dayStartEvents).map((events, groupIndex) =>
+            {eventUtils.groupEventsByTime(dayStartEvents).map((events, groupIndex) =>
               events.map((event) => {
-                const { top, height, width, left } = getEventPosition(event, events)
+                const { top, height, width, left } = eventUtils.getEventPosition(event, events)
                 const now = new Date()
                 const eventDateTime = new Date(event.date)
                 eventDateTime.setHours(parseInt(event.time.split(':')[0]), parseInt(event.time.split(':')[1]), 0, 0)
@@ -668,7 +581,7 @@ export function EventDetails({
                     key={event.id}
                     data-event-id={event.id}
                     className={cn(
-                      "absolute text-left px-1.5 py-0.5 rounded transition-all mb-0.5 group shadow-lg", // Уменьшаем отступы
+                      "absolute text-left px-1.5 py-0.5 rounded transition-all mb-0.5 group shadow-lg",
                       "bg-primary/10 hover:bg-primary/15",
                       event.source === "outlook" && "border-l-4 border-blue-500",
                       event.source === "caldav" && "border-l-4 border-green-500",
@@ -688,21 +601,13 @@ export function EventDetails({
                     }}
                     onClick={(e: React.MouseEvent) => handleEventClick(event, e)}
                     draggable={true}
-                    onDragStart={(e: React.DragEvent) => {
-                      setDraggedEvent(event);
-                      onDragStart(event);
-                      e.dataTransfer.effectAllowed = 'move';
-                      e.dataTransfer.setData('text/plain', String(event.id || ''));
-                      if (e.currentTarget instanceof HTMLElement) {
-                        e.currentTarget.style.opacity = "0.5";
-                      }
-                    }}
+                    onDragStart={(e: React.DragEvent) => handleDragStart(event, e)}
                     onDragEnd={handleDragEnd}
                   >
                     <div className="flex items-center h-full overflow-hidden">
                       <div className="flex-1 min-w-0">
                         <div className={cn(
-                          "font-medium flex items-center gap-1 truncate text-sm", // Уменьшаем размер шрифта
+                          "font-medium flex items-center gap-1 truncate text-sm",
                           height < 30 && "text-xs",
                           isPastEvent && "line-through text-white/50"
                         )}>
@@ -714,7 +619,7 @@ export function EventDetails({
                             "text-xs text-white/70 truncate",
                             isPastEvent && "text-white/40"
                           )}>
-                            {formatTimeWithAmPm(event.time)} - {formatDuration(event.duration || 60)}
+                            {eventUtils.formatTimeWithAmPm(event.time)} - {eventUtils.formatDuration(event.duration || 60)}
                           </div>
                         )}
                       </div>
@@ -733,6 +638,7 @@ export function EventDetails({
                 )
               })
             )}
+
             {/* Слоты 15 минут */}
             {slots.map((slot) => {
               const hour = Math.floor(slot / 4)
@@ -740,6 +646,7 @@ export function EventDetails({
               const isDropTarget = dragOverSlot === slot
               const isTaskDropTarget = draggedTask && dragOverSlot === slot
               const isHourLine = minute === 0
+
               return (
                 <div
                   key={slot}
@@ -772,7 +679,7 @@ export function EventDetails({
         </div>
       </div>
 
-      {/* Дровер для просмотра и редактирования события - теперь вертикальный */}
+      {/* Дровер для просмотра и редактирования события */}
       <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen} direction="right">
         <DrawerContent>
           <DrawerHeader>
@@ -787,7 +694,6 @@ export function EventDetails({
           </DrawerHeader>
 
           <DrawerBody>
-            {/* Режим редактирования */}
             <div className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="title" className="text-sm font-medium text-white/70">
@@ -955,7 +861,7 @@ export function EventDetails({
               )}
               <Button
                 size="icon"
-                className="h-12 w-12 "
+                className="h-12 w-12"
                 onClick={handleSaveEvent}
                 title="Сохранить"
                 disabled={!formData.title.trim()}

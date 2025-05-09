@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Calendar } from "@/components/calendar"
-import { EventDetails } from "@/components/event-details"
-import { BackgroundGradient } from "@/components/background-gradient"
+import { Calendar } from "@/components/calendar/calendar"
+import { EventDetails } from "@/components/calendar/event-details"
+import { BackgroundGradient } from "@/components/ui/background-gradient"
 import { useToast } from "@/hooks/use-toast"
 import { events as initialEvents, tasks as initialTasks } from "@/lib/data"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { CalendarEvent } from "@/lib/types"
 import { LocalCalendarStorage } from "@/lib/storage"
 

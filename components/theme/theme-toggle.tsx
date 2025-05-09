@@ -1,9 +1,9 @@
 "use client"
 
 import { Moon, Sun } from "lucide-react"
-import { useTheme } from "@/components/theme-provider"
-import { Button } from "./button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip"
+import { useTheme } from "@/components/theme"
+import { Button } from "@/components/ui"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui"
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()

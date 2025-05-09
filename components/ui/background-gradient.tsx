@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { useTheme } from "@/components/theme-provider"
+import { useTheme } from "@/components/theme"
 
 export function BackgroundGradient() {
   const canvasRef = useRef<HTMLCanvasElement>(null)

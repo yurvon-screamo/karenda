@@ -1,15 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./tabs"
-import { Button } from "./button"
-import { Input } from "./input"
-import { Label } from "./label"
-import { Switch } from "./switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui"
+import { Button } from "@/components/ui"
+import { Input } from "@/components/ui"
+import { Label } from "@/components/ui"
+import { Switch } from "@/components/ui"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui"
 import { Settings, CalendarDays, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerBody, DrawerClose } from "./drawer"
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerBody, DrawerClose } from "@/components/ui"
 
 interface IntegrationSettingsProps {
   onSaveSettings: (settings: IntegrationSettings) => void

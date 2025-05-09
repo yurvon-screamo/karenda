@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "./button"
+import { Button } from "@/components/ui"
 import { RefreshCw } from "lucide-react"
 import {
   IntegrationSettings,
   type IntegrationSettings as IntegrationSettingsType,
-} from "@/components/integration-settings"
+} from "@/components/sync/integration-settings"
 import { useToast } from "@/hooks/use-toast"
 
 interface CalendarSyncManagerProps {
@@ -18,7 +18,6 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
   const [isSyncing, setIsSyncing] = useState(false)
   const { toast } = useToast()
 
-  // Загрузка настроек из localStorage при монтировании
   useEffect(() => {
     const savedSettings = localStorage.getItem("calendarIntegrationSettings")
     if (savedSettings) {
@@ -30,13 +29,11 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
     }
   }, [])
 
-  // Сохранение настроек
   const handleSaveSettings = (newSettings: IntegrationSettingsType) => {
     setSettings(newSettings)
     localStorage.setItem("calendarIntegrationSettings", JSON.stringify(newSettings))
   }
 
-  // Синхронизация в зависимости от выбранного протокола
   const handleSync = async () => {
     if (!settings) {
       toast({

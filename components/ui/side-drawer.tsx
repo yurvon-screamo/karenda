@@ -3,7 +3,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { X } from "lucide-react"
-import { Button } from "@/components/button"
+import { Button } from "@/components/ui/button"
 
 interface SideDrawerProps {
   isOpen: boolean

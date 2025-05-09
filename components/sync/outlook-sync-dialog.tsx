@@ -3,9 +3,9 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui"
+import { Input } from "@/components/ui"
+import { Label } from "@/components/ui"
 import { Loader2, CalendarIcon, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -16,7 +16,7 @@ import {
   DrawerBody,
   DrawerFooter,
   DrawerClose,
-} from "@/components/ui/drawer"
+} from "@/components/ui"
 
 interface OutlookSyncDialogProps {
   onSyncComplete: (events: any[]) => void

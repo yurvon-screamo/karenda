@@ -2,8 +2,8 @@ import type React from "react"
 import type { Metadata } from "next"
 import localFont from 'next/font/local'
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/toaster"
+import { ThemeProvider } from "@/components/theme"
+import { Toaster } from "@/components/ui/toaster"
 
 const mapleMono = localFont({
   src: './fonts/MapleMono[wght].ttf',
