@@ -54,13 +54,13 @@ export function SideDrawer({ isOpen, onClose, children, className }: SideDrawerP
     >
       <div
         className={cn(
-          "fixed right-0 top-0 bottom-0 z-50 w-[400px] max-w-[90vw] bg-gradient-to-br from-gray-900/95 via-gray-800/95 to-gray-900/95 backdrop-blur-md text-white border-l border-white/20 shadow-xl transition-transform duration-300 ease-in-out rounded-3xl",
+          "fixed right-0 top-0 bottom-0 z-50 w-[400px] max-w-[90vw] bg-gradient-to-br from-[hsl(var(--background)/0.95)] via-[hsl(var(--card)/0.95)] to-[hsl(var(--background)/0.95)] backdrop-blur-md text-[hsl(var(--foreground))] border-l border-[hsl(var(--border)/0.2)] shadow-xl transition-transform duration-300 ease-in-out rounded-3xl",
           isOpen ? "translate-x-0" : "translate-x-full",
           className,
         )}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center justify-between p-4 border-b border-[hsl(var(--border)/0.1)]">
             <h2 className="text-xl font-semibold">Настройки интеграции</h2>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-white/10" onClick={onClose}>
               <X className="h-4 w-4" />

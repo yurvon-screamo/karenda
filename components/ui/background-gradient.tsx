@@ -22,14 +22,14 @@ export function BackgroundGradient() {
 
     if (theme === "light") {
       // Светлая тема - нежные пастельные оттенки
-      gradient.addColorStop(0, "#f5f3ff") // Очень светлый фиолетовый
-      gradient.addColorStop(0.5, "#faf5ff") // Очень светлый пурпурный
-      gradient.addColorStop(1, "#fdf2f8") // Очень светлый розовый
+      gradient.addColorStop(0, "#8ecfc9") // Бирюзовый
+      gradient.addColorStop(0.5, "#f6e7d7") // Светло-бежевый
+      gradient.addColorStop(1, "#f6b89e") // Персиковый
     } else {
       // Темная тема - глубокие насыщенные оттенки
-      gradient.addColorStop(0, "#4a1d96") // Темно-фиолетовый
-      gradient.addColorStop(0.5, "#8b5cf6") // Фиолетовый
-      gradient.addColorStop(1, "#db2777") // Розовый
+      gradient.addColorStop(0, "#2d2d3a") // Тёмно-синий
+      gradient.addColorStop(0.5, "#8ecfc9") // Бирюзовый
+      gradient.addColorStop(1, "#f6b89e") // Персиковый
     }
 
     const animate = () => {

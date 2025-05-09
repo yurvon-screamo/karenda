@@ -44,7 +44,7 @@ const Drawer = ({ open, onOpenChange, children, direction = "right" }: DrawerPro
     >
       <div
         className={cn(
-          "fixed z-50 h-full bg-gradient-to-br from-[#1e1a2e]/95 via-[#1a1525]/95 to-[#1e1a2e]/95 backdrop-blur-md text-white shadow-xl transition-transform duration-300 ease-in-out",
+          "fixed z-50 h-full bg-gradient-to-br from-[hsl(var(--background)/0.95)] via-[hsl(var(--card)/0.95)] to-[hsl(var(--background)/0.95)] backdrop-blur-md text-[hsl(var(--foreground))] shadow-xl transition-transform duration-300 ease-in-out",
           direction === "right" &&
           "right-0 top-0 bottom-0 w-[500px] max-w-[90vw] border-l border-primary/20 rounded-3xl",
           direction === "left" && "left-0 top-0 bottom-0 w-[500px] max-w-[90vw] border-r border-primary/20 rounded-3xl",

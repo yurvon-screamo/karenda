@@ -456,7 +456,9 @@ export function EventDetails({
   return (
     <div className="w-full md:w-2/3 flex flex-col h-[calc(100vh-2rem)]">
       <div className="flex items-center justify-between pt-6 pb-4 px-6 border-b border-primary/20">
-        <div className="flex-1"></div>
+        <div className="flex-1 flex items-center gap-3">
+          <img src="/karenda.png" alt="Karenda logo" style={{ height: '80px', width: '80px', borderRadius: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }} />
+        </div>
         <div className="flex flex-col items-center justify-center">
           <div className="text-6xl font-light leading-none">{selectedDate.getDate()}</div>
           <div className="text-xl mt-1">{WEEKDAYS[selectedDate.getDay()]}</div>
@@ -581,9 +583,7 @@ export function EventDetails({
                       "absolute text-left px-1.5 py-0.5 rounded transition-all mb-0.5 group shadow-lg",
                       "bg-primary/10 hover:bg-primary/15",
                       event.source === "outlook" && "border-l-4 border-blue-500",
-                      event.source === "caldav" && "border-l-4 border-green-500",
                       event.source === "external" && "border-l-4 border-purple-500",
-                      event.fromTask && "border-l-4 border-green-500",
                       event.recurrenceType && "border-r-4 border-r-primary/50",
                       isPastEvent && "opacity-50 grayscale hover:opacity-70",
                       "cursor-grab active:cursor-grabbing"

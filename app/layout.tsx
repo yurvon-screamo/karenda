@@ -28,9 +28,6 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <body className={mapleMono.className}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem 0 0.5rem 0' }}>
-          <img src="/karenda.png" alt="Karenda logo" style={{ height: '64px', width: '64px', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }} />
-        </div>
         <ThemeProvider defaultTheme="dark" storageKey="calendar-theme">
           {children}
           <Toaster />
