@@ -5,7 +5,6 @@ import { Calendar } from "@/components/calendar/calendar"
 import { EventDetails } from "@/components/calendar/event-details"
 import { BackgroundGradient } from "@/components/ui/background-gradient"
 import { useToast } from "@/hooks/use-toast"
-import { events as initialEvents, tasks as initialTasks } from "@/lib/data"
 import { CalendarEvent } from "@/lib/types"
 import { LocalCalendarStorage } from "@/lib/storage"
 
@@ -14,7 +13,7 @@ export default function Home() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null)
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
-  const [tasks, setTasks] = useState(initialTasks)
+  const [tasks, setTasks] = useState<CalendarEvent[]>([])
   const { toast } = useToast()
   const storage = new LocalCalendarStorage()
 
@@ -24,9 +23,7 @@ export default function Home() {
       try {
         const savedEvents = await storage.getEvents()
         if (savedEvents.length === 0) {
-          // Если нет сохраненных событий, используем начальные
-          await storage.saveEvents(initialEvents)
-          setCalendarEvents(initialEvents)
+
         } else {
           setCalendarEvents(savedEvents)
         }
@@ -171,19 +168,42 @@ export default function Home() {
   const handleSyncComplete = async (syncedEvents: any[]) => {
     // Преобразуем события из внешних источников в формат нашего приложения
     const formattedEvents: CalendarEvent[] = syncedEvents.map((event, index) => {
-      const startDate = new Date(event.start)
+      // Если событие уже в нужном формате, используем его как есть
+      if (event.date && event.time) {
+        return {
+          id: event.id || `synced-${index}-${Date.now()}`,
+          title: event.title,
+          date: event.date,
+          time: event.time,
+          duration: event.duration,
+          description: event.description ? event.description.split('\\n\\n')[0] : "",
+          source: event.source || "external",
+          location: event.location,
+          isAllDay: event.isAllDay,
+        }
+      }
+
+      // Иначе пытаемся преобразовать даты
+      const startDate = event.start instanceof Date ? event.start : new Date(event.start);
+      const endDate = event.end instanceof Date ? event.end : new Date(event.end);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        console.error('Invalid date detected:', { start: event.start, end: event.end });
+        return null;
+      }
+
       return {
         id: event.id || `synced-${index}-${Date.now()}`,
         title: event.title,
-        date: startDate.toISOString(),
+        date: startDate.toISOString().split('T')[0],
         time: `${startDate.getHours().toString().padStart(2, "0")}:${startDate.getMinutes().toString().padStart(2, "0")}`,
-        duration: Math.round((new Date(event.end).getTime() - startDate.getTime()) / 60000), // длительность в минутах
-        description: event.description || "",
+        duration: Math.round((endDate.getTime() - startDate.getTime()) / 60000), // длительность в минутах
+        description: event.description ? event.description.split('\\n\\n')[0] : "",
         source: event.source || "external",
         location: event.location,
         isAllDay: event.isAllDay,
       }
-    })
+    }).filter(Boolean) as CalendarEvent[];
 
     // Объединяем с существующими событиями, исключая дубликаты
     const existingIds = new Set(calendarEvents.map((e) => e.id))

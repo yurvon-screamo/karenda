@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { CalDAVClient, type CalDAVCredentialsProps } from "@/lib/caldav-client"
+import { CalDAVClient } from "@/lib/caldav-client"
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,26 +11,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Отсутствуют обязательные параметры" }, { status: 400 })
     }
 
-    // Создаем клиент CalDAV
-    const client = new CalDAVClient()
+    // Проверяем наличие calendarId
+    if (!calendarId) {
+      // Если calendarId не указан, получаем список календарей
+      const client = new CalDAVClient(serverUrl, username, password)
+      await client.connect()
 
-    // Подключаемся к серверу CalDAV
-    const credentials: CalDAVCredentialsProps = {
-      serverUrl,
-      username,
-      password,
+      // Получаем список календарей
+      const calendars = await client.getCalendars()
+
+      return NextResponse.json({ calendars })
     }
 
-    await client.connect(credentials)
+    // Создаем клиент CalDAV
+    const client = new CalDAVClient(serverUrl, username, password)
 
-    // Получаем список календарей
-    const calendars = client.getCalendars()
+    // Подключаемся к серверу CalDAV
+    await client.connect()
 
     // Получаем события календаря
     const events = await client.getCalendarEvents(calendarId, new Date(startDate), new Date(endDate))
 
-    // Возвращаем события и список календарей
-    return NextResponse.json({ events, calendars })
+    // Возвращаем события
+    return NextResponse.json({ events })
   } catch (error) {
     console.error("Ошибка синхронизации с CalDAV:", error)
     return NextResponse.json(

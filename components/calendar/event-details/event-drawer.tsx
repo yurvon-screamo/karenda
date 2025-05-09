@@ -209,7 +209,7 @@ export function EventDrawer({
                                 value={formData.description}
                                 onChange={onInputChange}
                                 placeholder="Описание события"
-                                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 min-h-[100px]"
+                                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 min-h-[200px]"
                             />
                         </div>
                     </div>

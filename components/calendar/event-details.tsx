@@ -415,26 +415,26 @@ export function EventDetails({
   }
 
   // Компонент индикатора текущего времени
-  function CurrentTimeIndicator() {
-    const [currentTime, setCurrentTime] = useState(new Date())
+  const CurrentTimeIndicator = () => {
+    const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
     useEffect(() => {
-      const timer = setInterval(() => {
-        setCurrentTime(new Date())
-      }, 60000)
-      return () => clearInterval(timer)
-    }, [])
+      const updateTime = () => {
+        setCurrentTime(new Date());
+      };
 
-    const now = new Date()
-    const isToday = now.getDate() === selectedDate.getDate() &&
-      now.getMonth() === selectedDate.getMonth() &&
-      now.getFullYear() === selectedDate.getFullYear()
+      updateTime();
+      const interval = setInterval(updateTime, 60000); // Обновляем каждую минуту
 
-    if (!isToday) return null
+      return () => clearInterval(interval);
+    }, []);
 
-    const hours = currentTime.getHours()
-    const minutes = currentTime.getMinutes()
-    const top = (hours * 60 + minutes) * SLOT_HEIGHT
+    if (!currentTime) return null;
+
+    const hours = currentTime.getHours();
+    const minutes = currentTime.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
+    const top = totalMinutes * SLOT_HEIGHT;
 
     return (
       <div
@@ -447,14 +447,11 @@ export function EventDetails({
               {`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`}
             </div>
           </div>
-          <div className="flex-1 relative">
-            <div className="absolute left-0 right-0 h-0.5 bg-red-500" />
-            <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-red-500" />
-          </div>
+          <div className="flex-1 h-px bg-red-500" />
         </div>
       </div>
-    )
-  }
+    );
+  };
 
   return (
     <div className="w-full md:w-2/3 flex flex-col h-[calc(100vh-2rem)]">
@@ -839,7 +836,7 @@ export function EventDetails({
                   value={formData.description}
                   onChange={handleInputChange}
                   placeholder="Описание события"
-                  className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 min-h-[100px]"
+                  className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 min-h-[200px]"
                 />
               </div>
             </div>

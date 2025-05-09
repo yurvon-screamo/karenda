@@ -2,12 +2,35 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui"
-import { RefreshCw } from "lucide-react"
-import {
-  IntegrationSettings,
-  type IntegrationSettings as IntegrationSettingsType,
-} from "@/components/sync/integration-settings"
+import { RefreshCw, CalendarDays, Settings2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { CalDAVSyncDialog } from "./caldav-sync-dialog"
+import { OutlookSyncDialog } from "./outlook-sync-dialog"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerClose,
+} from "@/components/ui/drawer"
+import { cn } from "@/lib/utils"
+
+interface IntegrationSettingsType {
+  protocol: "ews" | "caldav"
+  autoSync: boolean
+  syncInterval: number
+  ews?: {
+    email: string
+    password: string
+    serverUrl?: string
+  }
+  caldav?: {
+    serverUrl: string
+    username: string
+    password: string
+    calendarId: string
+  }
+}
 
 interface CalendarSyncManagerProps {
   onSyncComplete: (events: any[]) => void
@@ -16,22 +39,47 @@ interface CalendarSyncManagerProps {
 export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps) {
   const [settings, setSettings] = useState<IntegrationSettingsType | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [selectedProtocol, setSelectedProtocol] = useState<"ews" | "caldav" | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
     const savedSettings = localStorage.getItem("calendarIntegrationSettings")
     if (savedSettings) {
       try {
-        setSettings(JSON.parse(savedSettings))
+        const parsedSettings = JSON.parse(savedSettings)
+        setSettings(parsedSettings)
       } catch (e) {
         console.error("Ошибка при загрузке настроек:", e)
       }
     }
   }, [])
 
+  const handleOpenSettings = () => {
+    const savedSettings = localStorage.getItem("calendarIntegrationSettings")
+    if (savedSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedSettings)
+        if (parsedSettings.protocol) {
+          setSelectedProtocol(parsedSettings.protocol)
+        }
+      } catch (e) {
+        console.error("Ошибка при загрузке настроек:", e)
+      }
+    }
+    setIsSettingsOpen(true)
+  }
+
   const handleSaveSettings = (newSettings: IntegrationSettingsType) => {
     setSettings(newSettings)
     localStorage.setItem("calendarIntegrationSettings", JSON.stringify(newSettings))
+    // setIsSettingsOpen(false)
+    // setSelectedProtocol(null)
+  }
+
+  const handleCloseSettings = () => {
+    setIsSettingsOpen(false)
+    setSelectedProtocol(null)
   }
 
   const handleSync = async () => {
@@ -138,6 +186,7 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
       throw new Error(data.error || "Ошибка синхронизации с CalDAV")
     }
 
+    console.log("data", data)
     // Передаем события в родительский компонент
     onSyncComplete(data.events)
 
@@ -178,7 +227,73 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
         <span className="sr-only">Синхронизировать календарь</span>
       </Button>
 
-      <IntegrationSettings onSaveSettings={handleSaveSettings} currentSettings={settings || undefined} />
+      <Button
+        variant="outline"
+        size="icon"
+        className="rounded-full h-10 w-10 border-primary/20 hover:bg-white/10"
+        onClick={handleOpenSettings}
+        title="Настройки синхронизации"
+      >
+        <Settings2 className="h-5 w-5" />
+        <span className="sr-only">Настройки синхронизации</span>
+      </Button>
+
+      <Drawer open={isSettingsOpen} onOpenChange={handleCloseSettings} direction="right">
+        <DrawerContent>
+          <DrawerHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-5 w-5 text-primary" />
+                <DrawerTitle>Настройки синхронизации</DrawerTitle>
+              </div>
+              <DrawerClose onClick={handleCloseSettings} />
+            </div>
+          </DrawerHeader>
+
+          <div className="grid grid-cols-2 gap-4 p-6">
+            <Button
+              variant="outline"
+              className={cn(
+                "h-24 flex flex-col items-center justify-center gap-2",
+                selectedProtocol === "caldav" && "border-primary"
+              )}
+              onClick={() => setSelectedProtocol("caldav")}
+            >
+              <CalendarDays className="h-8 w-8" />
+              <span>CalDAV</span>
+            </Button>
+            <Button
+              variant="outline"
+              className={cn(
+                "h-24 flex flex-col items-center justify-center gap-2",
+                selectedProtocol === "ews" && "border-primary"
+              )}
+              onClick={() => setSelectedProtocol("ews")}
+            >
+              <CalendarDays className="h-8 w-8" />
+              <span>Outlook</span>
+            </Button>
+          </div>
+        </DrawerContent>
+      </Drawer>
+
+      {selectedProtocol === "caldav" && (
+        <CalDAVSyncDialog
+          onSyncComplete={onSyncComplete}
+          onSettingsSave={handleSaveSettings}
+          isOpen={selectedProtocol === "caldav"}
+          onOpenChange={(open) => !open && setSelectedProtocol(null)}
+        />
+      )}
+
+      {selectedProtocol === "ews" && (
+        <OutlookSyncDialog
+          onSyncComplete={onSyncComplete}
+          onSettingsSave={handleSaveSettings}
+          isOpen={selectedProtocol === "ews"}
+          onOpenChange={(open) => !open && setSelectedProtocol(null)}
+        />
+      )}
     </div>
   )
 }
