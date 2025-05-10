@@ -188,6 +188,7 @@ export function EventDetails({
       recurrenceEndDate: '',
       participants: []
     })
+    setIsDrawerOpen(true)
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -274,17 +275,30 @@ export function EventDetails({
 
   // Обработчики drag & drop
   const handleDragStart = (event: CalendarEvent | null, e: React.DragEvent) => {
+    console.log('Drag start:', event)
+    if (!event) return
+
+    // Проверяем, можно ли перетаскивать событие
+    if (event.source === 'outlook' || event.source === 'caldav') {
+      e.preventDefault()
+      toast({
+        title: "Невозможно переместить",
+        description: "Синхронизированные события нельзя перемещать",
+        variant: "destructive",
+      })
+      return
+    }
+
     e.stopPropagation()
-    dragStartY.current = e.clientY
-    const [eventHour] = event?.time.split(":").map(Number) || [0]
-    draggedEventInitialHour.current = eventHour
-    setDraggedEvent(event)
-    onDragStart(event)
-    e.dataTransfer.setData("text/plain", String(event?.id || ''))
+    e.dataTransfer.setData("text/plain", event.id.toString())
     e.dataTransfer.effectAllowed = "move"
+
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = "0.5"
     }
+
+    setDraggedEvent(event)
+    onDragStart(event)
   }
 
   const handleTaskDragStart = (task: Task) => {
@@ -292,30 +306,89 @@ export function EventDetails({
   }
 
   const handleDragEnd = (e: React.DragEvent) => {
+    console.log('Drag end')
     e.stopPropagation()
+
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = "1"
     }
-    if (!draggedEvent || dragOverSlot === null) {
-      setDraggedEvent(null)
-      onDragStart(null)
-      setDragOverSlot(null)
-      return
-    }
-
-    const hour = Math.floor(dragOverSlot / 4)
-    const minute = (dragOverSlot % 4) * 15
-    onUpdateEventTime(draggedEvent, hour, minute)
-
-    toast({
-      title: "Событие перемещено",
-      description: `Событие "${draggedEvent.title}" перемещено на ${eventUtils.formatHour(hour)}:${minute.toString().padStart(2, "0")}`,
-    })
 
     setDraggedEvent(null)
     onDragStart(null)
     setDragOverSlot(null)
-    setDraggedTask(null)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const y = e.clientY - rect.top
+
+    // Автопрокрутка при перетаскивании
+    const scrollContainer = e.currentTarget.parentElement
+    if (scrollContainer) {
+      const scrollThreshold = 100
+      const scrollSpeed = 10
+
+      if (rect.bottom - e.clientY < scrollThreshold) {
+        scrollContainer.scrollTop += scrollSpeed
+      }
+      if (e.clientY - rect.top < scrollThreshold) {
+        scrollContainer.scrollTop -= scrollSpeed
+      }
+    }
+
+    const slot = Math.round(y / (15 * SLOT_HEIGHT))
+    console.log('Drag over slot:', slot)
+    setDragOverSlot(slot)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    console.log('Drop event:', { draggedEvent, dragOverSlot })
+    e.preventDefault()
+
+    if (!draggedEvent || dragOverSlot === null) {
+      console.log('No dragged event or slot')
+      return
+    }
+
+    const slotMinutes = dragOverSlot * 15
+    const hour = Math.floor(slotMinutes / 60)
+    const minute = slotMinutes % 60
+
+    console.log('Calculated time:', { hour, minute })
+
+    try {
+      await onUpdateEventTime(draggedEvent, hour, minute)
+
+      toast({
+        title: "Событие перемещено",
+        description: `Событие "${draggedEvent.title}" перемещено на ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
+      })
+    } catch (error) {
+      console.error('Ошибка при перемещении события:', error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось переместить событие",
+        variant: "destructive",
+      })
+    } finally {
+      setDraggedEvent(null)
+      onDragStart(null)
+      setDragOverSlot(null)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    console.log('Drag leave')
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX
+    const y = e.clientY
+
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverSlot(null)
+    }
   }
 
   const CurrentTimeIndicator = () => {
@@ -464,71 +537,9 @@ export function EventDetails({
           {/* Правая колонка — слоты и события */}
           <div
             className="flex-1 relative"
-            onDragOver={e => {
-              e.preventDefault()
-              const rect = e.currentTarget.getBoundingClientRect()
-              const y = e.clientY - rect.top
-
-              const scrollContainer = e.currentTarget.parentElement
-              if (scrollContainer) {
-                const scrollThreshold = 100
-                const scrollSpeed = 10
-
-                if (rect.bottom - e.clientY < scrollThreshold) {
-                  scrollContainer.scrollTop += scrollSpeed
-                }
-                if (e.clientY - rect.top < scrollThreshold) {
-                  scrollContainer.scrollTop -= scrollSpeed
-                }
-              }
-
-              const slot = Math.round(y / (15 * SLOT_HEIGHT))
-              setDragOverSlot(slot)
-            }}
-            onDrop={e => {
-              e.preventDefault()
-              if (draggedEvent && dragOverSlot !== null) {
-                const slotMinutes = dragOverSlot * 15
-                const hour = Math.floor(slotMinutes / 60)
-                const minute = slotMinutes % 60
-                onUpdateEventTime(draggedEvent, hour, minute)
-
-                // Обновляем события в localStorage
-                const updatedEvents = events.map(event =>
-                  event.id === draggedEvent.id
-                    ? { ...event, time: `${hour.toString().padStart(2, "0")}: ${minute.toString().padStart(2, "0")}` }
-                    : event
-                )
-                localStorage.setItem('calendar_events', JSON.stringify(updatedEvents))
-
-                toast({
-                  title: "Событие перемещено",
-                  description: `Событие "${draggedEvent.title}" перемещено на ${hour.toString().padStart(2, "0")}: ${minute.toString().padStart(2, "0")}`,
-                })
-
-                setDraggedEvent(null)
-                setDragOverSlot(null)
-                onDragStart(null)
-              } else if (draggedTask && dragOverSlot !== null) {
-                const slotMinutes = dragOverSlot * 15
-                const hour = Math.floor(slotMinutes / 60)
-                const minute = slotMinutes % 60
-                onConvertTaskToEvent(draggedTask, hour, minute)
-
-                setDraggedTask(null)
-                setDragOverSlot(null)
-                setDraggedEvent(null)
-                onDragStart(null)
-              }
-            }}
-            onDragLeave={e => {
-              const rect = e.currentTarget.getBoundingClientRect()
-              const x = e.clientX
-              const y = e.clientY
-              if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-                setDragOverSlot(null)
-              }
-            }}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragLeave={handleDragLeave}
             style={{ height: `${24 * 60 * SLOT_HEIGHT}px` }}
           >
             <CurrentTimeIndicator />
@@ -552,7 +563,10 @@ export function EventDetails({
                       event.source === "caldav" && "border-l-4 border-purple-500",
                       event.recurrenceType && "border-r-4 border-r-primary/50",
                       isPastEvent && "opacity-50 grayscale hover:opacity-70",
-                      "cursor-grab active:cursor-grabbing"
+                      // Добавляем курсор в зависимости от источника события
+                      (event.source === "outlook" || event.source === "caldav")
+                        ? "cursor-not-allowed"
+                        : "cursor-grab active:cursor-grabbing"
                     )}
                     style={{
                       top: `${top}px`,
@@ -563,7 +577,7 @@ export function EventDetails({
                       zIndex: 10
                     }}
                     onClick={(e: React.MouseEvent) => handleEventClick(event)}
-                    draggable={true}
+                    draggable={!(event.source === "outlook" || event.source === "caldav")}
                     onDragStart={(e: React.DragEvent) => handleDragStart(event, e)}
                     onDragEnd={handleDragEnd}
                   >

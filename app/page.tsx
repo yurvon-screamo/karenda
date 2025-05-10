@@ -40,7 +40,23 @@ export default function Home() {
   useEffect(() => {
     const saveEvents = async () => {
       try {
-        await calendarRepo.saveEvents(calendarEvents)
+        // Проверяем, что события действительно изменились
+        const currentEvents = await calendarRepo.getEvents()
+        const hasChanges = JSON.stringify(currentEvents) !== JSON.stringify(calendarEvents)
+
+        if (hasChanges) {
+          console.log('Сохранение изменений в событиях:', {
+            before: currentEvents.map(e => ({ id: e.id, source: e.source })),
+            after: calendarEvents.map(e => ({ id: e.id, source: e.source }))
+          })
+
+          // Удаляем дубликаты перед сохранением
+          const uniqueEvents = calendarEvents.filter((event, index, self) =>
+            index === self.findIndex(e => e.id === event.id)
+          )
+
+          await calendarRepo.saveEvents(uniqueEvents)
+        }
       } catch (error) {
         console.error('Ошибка при сохранении событий:', error)
         toast({
@@ -109,6 +125,8 @@ export default function Home() {
   // Обработчик обновления времени события внутри дня
   const handleUpdateEventTime = async (event: CalendarEvent, newHour: number, newMinute: number) => {
     try {
+      console.log('Обновление времени события:', { event, newHour, newMinute })
+
       const newTime = `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`
 
       // Обновляем дату события
@@ -121,13 +139,32 @@ export default function Home() {
         date: eventDate.toISOString(),
       }
 
+      console.log('Обновленное событие:', updatedEvent)
+
       // Обновляем список событий
       const events = await calendarRepo.getEvents()
-      const index = events.findIndex(e => e.id === updatedEvent.id)
+
+      // Ищем событие, учитывая как оригинальные, так и сгенерированные события
+      const index = events.findIndex(e => {
+        // Проверяем точное совпадение ID
+        if (e.id === updatedEvent.id) return true
+        // Проверяем, является ли это сгенерированным событием
+        if (typeof e.id === 'string' && e.id.startsWith(`${updatedEvent.id}-recurrence-`)) return true
+        return false
+      })
+
       if (index !== -1) {
         events[index] = updatedEvent
-        await calendarRepo.saveEvents(events)
+        // Обновляем состояние, что вызовет useEffect для сохранения
         setCalendarEvents(events)
+
+        toast({
+          title: "Время обновлено",
+          description: `Событие "${event.title}" перемещено на ${newTime}`,
+        })
+      } else {
+        console.error('Событие не найдено:', { eventId: event.id, events })
+        throw new Error('Событие не найдено')
       }
     } catch (error) {
       console.error('Ошибка при обновлении времени события:', error)
@@ -136,6 +173,7 @@ export default function Home() {
         description: "Не удалось обновить время события",
         variant: "destructive",
       })
+      throw error // Пробрасываем ошибку дальше
     }
   }
 
@@ -159,7 +197,6 @@ export default function Home() {
       // Добавляем новое событие
       const events = await calendarRepo.getEvents()
       events.push(newEvent)
-      await calendarRepo.saveEvents(events)
       setCalendarEvents(events)
 
       // Удаляем задачу
