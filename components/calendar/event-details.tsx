@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Trash2, X, Save, GripVertical, Repeat, Pencil, UserPlus, UserMinus, Lock } from "lucide-react"
+import { Trash2, X, Save, GripVertical, Repeat, Pencil, UserPlus, UserMinus, Lock, FileText } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { Textarea } from "../ui/textarea"
@@ -568,6 +568,16 @@ export function EventDetails({
                     onDragEnd={handleDragEnd}
                   >
                     <div className="flex items-center h-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity flex-shrink-0 mr-5",
+                          isPastEvent && "opacity-30"
+                        )}
+                        title="Просмотр"
+                        onClick={(e: React.MouseEvent) => handleEditEvent(event, e)}
+                      >
+                        <FileText className="h-4 w-4 text-white/60 hover:text-white/80" />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className={cn(
                           "font-medium flex items-center gap-1 truncate text-sm",
@@ -587,16 +597,6 @@ export function EventDetails({
                             </div>
                           </>
                         )}
-                      </div>
-                      <div
-                        className={cn(
-                          "opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity flex-shrink-0",
-                          isPastEvent && "opacity-30"
-                        )}
-                        title="Редактировать"
-                        onClick={(e: React.MouseEvent) => handleEditEvent(event, e)}
-                      >
-                        <Pencil className="h-3 w-3 text-white/60 hover:text-white/80" />
                       </div>
                     </div>
                   </div>
