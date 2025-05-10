@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Trash2, X, Save, GripVertical, Repeat, Pencil } from "lucide-react"
+import { Trash2, X, Save, GripVertical, Repeat, Pencil, UserPlus, UserMinus } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { Textarea } from "../ui/textarea"
@@ -23,139 +23,22 @@ import { useToast } from "@/hooks/use-toast"
 import { Switch } from "@/components/ui"
 import { Label } from "@/components/ui"
 import { DayTasks } from "@/components/calendar/day-tasks"
-import { CalendarEvent } from "@/lib/types"
-
-// Константы
-const SLOT_HEIGHT = 0.75 // px за минуту
-const EMPTY_SLOT_HEIGHT = 12 // px
-
-const WEEKDAYS = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"]
-const MONTH_NAMES = [
-  "Января", "Февраля", "Марта", "Апреля", "Мая", "Июня",
-  "Июля", "Августа", "Сентября", "Октября", "Ноября", "Декабря"
-]
-
-// Утилиты для работы с событиями
-const eventUtils = {
-  formatHour: (hour: number): string => {
-    return `${hour.toString().padStart(2, "0")}:00`
-  },
-
-  formatTimeWithAmPm: (time: string): string => {
-    const [hours, minutes] = time.split(":").map(Number)
-
-    if (hours === 0) {
-      return `12:${minutes.toString().padStart(2, "0")} AM`
-    } else if (hours < 12) {
-      return `${hours}:${minutes.toString().padStart(2, "0")} AM`
-    } else if (hours === 12) {
-      return `12:${minutes.toString().padStart(2, "0")} PM`
-    } else {
-      return `${hours - 12}:${minutes.toString().padStart(2, "0")} PM`
-    }
-  },
-
-  formatDuration: (durationMinutes: number): string => {
-    const hours = Math.floor(durationMinutes / 60)
-    const minutes = durationMinutes % 60
-
-    if (hours === 0) {
-      return `${minutes} минут`
-    } else if (minutes === 0) {
-      return hours === 1 ? `${hours} час` : hours < 5 ? `${hours} часа` : `${hours} часов`
-    } else {
-      const hoursText = hours === 1 ? `${hours} час` : hours < 5 ? `${hours} часа` : `${hours} часов`
-      return `${hoursText} ${minutes} минут`
-    }
-  },
-
-  formatRecurrenceType: (type: string): string => {
-    switch (type) {
-      case "daily":
-        return "Ежедневно"
-      case "weekly":
-        return "Еженедельно"
-      case "weekdays":
-        return "По рабочим дням"
-      case "monthly":
-        return "Ежемесячно"
-      default:
-        return "Не повторяется"
-    }
-  },
-
-  groupEventsByTime: (events: CalendarEvent[]): CalendarEvent[][] => {
-    const sortedEvents = [...events].sort((a, b) => {
-      const [aHour, aMinute] = a.time.split(":").map(Number)
-      const [bHour, bMinute] = b.time.split(":").map(Number)
-      return (aHour * 60 + aMinute) - (bHour * 60 + bMinute)
-    })
-
-    const groups: CalendarEvent[][] = []
-    let currentGroup: CalendarEvent[] = []
-
-    sortedEvents.forEach(event => {
-      const [eventHour, eventMinute] = event.time.split(":").map(Number)
-      const eventStartMinutes = eventHour * 60 + eventMinute
-      const eventEndMinutes = eventStartMinutes + (event.duration || 60)
-
-      const overlapsWithGroup = currentGroup.some(groupEvent => {
-        const [groupHour, groupMinute] = groupEvent.time.split(":").map(Number)
-        const groupStartMinutes = groupHour * 60 + groupMinute
-        const groupEndMinutes = groupStartMinutes + (groupEvent.duration || 60)
-
-        return (
-          (eventStartMinutes >= groupStartMinutes && eventStartMinutes < groupEndMinutes) ||
-          (eventEndMinutes > groupStartMinutes && eventEndMinutes <= groupEndMinutes) ||
-          (eventStartMinutes <= groupStartMinutes && eventEndMinutes >= groupEndMinutes)
-        )
-      })
-
-      if (overlapsWithGroup) {
-        currentGroup.push(event)
-      } else {
-        if (currentGroup.length > 0) {
-          groups.push(currentGroup)
-        }
-        currentGroup = [event]
-      }
-    })
-
-    if (currentGroup.length > 0) {
-      groups.push(currentGroup)
-    }
-
-    return groups
-  },
-
-  getEventPosition: (event: CalendarEvent, group: CalendarEvent[]) => {
-    const [eventHour, eventMinute] = event.time.split(":").map(Number)
-    const duration = event.duration || 60
-    const top = eventHour * 60 * SLOT_HEIGHT + eventMinute * SLOT_HEIGHT
-    const height = duration * SLOT_HEIGHT
-
-    const index = group.findIndex(e => e.id === event.id)
-    const totalEvents = group.length
-
-    const width = `${100 / totalEvents}%`
-    const left = `${(index * 100) / totalEvents}%`
-
-    return { top, height, width, left }
-  }
-}
+import { CalendarEvent, Task, ParticipantStatus, ParticipantRole } from "@/lib/types"
+import { eventUtils } from "./event-details/utils"
+import { SLOT_HEIGHT, WEEKDAYS, MONTH_NAMES } from "./event-details/constants"
 
 interface EventDetailsProps {
   selectedDate: Date
   selectedEvent: CalendarEvent | null
   onClose: () => void
   events: CalendarEvent[]
-  tasks: any[]
+  tasks: Task[]
   onUpdateEvents: (events: CalendarEvent[]) => void
-  onUpdateTasks: (tasks: any[]) => void
+  onUpdateTasks: (tasks: Task[]) => void
   onUpdateEventTime: (event: CalendarEvent, hour: number, minute: number) => void
-  onSyncComplete: (events: any[]) => void
+  onSyncComplete: (events: CalendarEvent[]) => void
   onDragStart: (event: CalendarEvent | null) => void
-  onConvertTaskToEvent: (task: any, hour: number, minute: number) => void
+  onConvertTaskToEvent: (task: Task, hour: number, minute: number) => void
 }
 
 export function EventDetails({
@@ -173,22 +56,59 @@ export function EventDetails({
 }: EventDetailsProps) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [currentEvent, setCurrentEvent] = useState<CalendarEvent | null>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [formData, setFormData] = useState({
-    title: "",
-    date: "",
-    time: "",
-    timeFormat: "AM",
-    duration: "60",
-    description: "",
+  const [formData, setFormData] = useState<{
+    title: string
+    description: string
+    date: string
+    time: string
+    timeFormat: 'AM' | 'PM'
+    duration: number
+    location: string
+    isAllDay: boolean
+    isRecurring: boolean
+    recurrenceType?: 'daily' | 'weekly' | 'weekdays' | 'monthly'
+    recurrenceEndDate?: string
+    participants: {
+      id: string
+      name: string
+      email: string
+      avatar?: string
+      status?: ParticipantStatus
+      role?: ParticipantRole
+      isOrganizer?: boolean
+    }[]
+  }>({
+    title: '',
+    description: '',
+    date: '',
+    time: '',
+    timeFormat: 'AM',
+    duration: 60,
+    location: '',
+    isAllDay: false,
     isRecurring: false,
-    recurrenceType: "daily",
-    recurrenceEndDate: "",
+    participants: []
   })
   const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null)
-  const [draggedTask, setDraggedTask] = useState<any>(null)
+  const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null)
   const { toast } = useToast()
+  const [newParticipant, setNewParticipant] = useState({ name: "", email: "" })
+
+  // Загрузка событий из localStorage при инициализации
+  useEffect(() => {
+    const storedEvents = localStorage.getItem('calendar_events')
+    if (storedEvents) {
+      try {
+        const parsedEvents = JSON.parse(storedEvents)
+        if (Array.isArray(parsedEvents)) {
+          onUpdateEvents(parsedEvents)
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке событий из localStorage:', error)
+      }
+    }
+  }, [])
 
   // Refs для отслеживания перетаскивания
   const dragStartY = useRef<number>(0)
@@ -217,82 +137,55 @@ export function EventDetails({
   })
 
   // Обработчики событий
-  const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleEventClick = (event: CalendarEvent, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation()
+    }
+
+    setCurrentEvent(event)
+    const [hours, minutes] = event.time.split(':')
+    const timeFormat = parseInt(hours) >= 12 ? 'PM' as const : 'AM' as const
+    const newFormData = {
+      title: event.title,
+      description: event.description || '',
+      date: event.date,
+      time: event.time,
+      timeFormat,
+      duration: event.duration || 60,
+      location: event.location || '',
+      isAllDay: event.isAllDay || false,
+      isRecurring: !!event.recurrenceType,
+      recurrenceType: event.recurrenceType || 'daily',
+      recurrenceEndDate: event.recurrenceEndDate || '',
+      participants: event.participants || []
+    }
+    setFormData(newFormData)
   }
 
   const handleEditEvent = (event: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation()
-    setCurrentEvent(event)
-    setIsEditing(true)
+    handleEventClick(event)
     setIsDrawerOpen(true)
-
-    const eventDate = new Date(event.date)
-    const [hours] = event.time.split(":").map(Number)
-    const timeFormat = hours < 12 ? "AM" : "PM"
-    const recurrenceEndDate = event.recurrenceEndDate
-      ? new Date(event.recurrenceEndDate).toISOString().split("T")[0]
-      : ""
-
-    setFormData({
-      title: event.title,
-      date: `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, "0")}-${String(
-        eventDate.getDate(),
-      ).padStart(2, "0")}`,
-      time: event.time,
-      timeFormat,
-      duration: event.duration?.toString() || "60",
-      description: event.description || "",
-      isRecurring: !!event.recurrenceType,
-      recurrenceType: event.recurrenceType || "daily",
-      recurrenceEndDate,
-    })
   }
 
-  const handleCreateEvent = () => {
+  const handleTimeClick = (time: string) => {
+    const [hours, minutes] = time.split(':')
+    const timeFormat = parseInt(hours) >= 12 ? 'PM' : 'AM'
+    const formattedTime = `${hours.padStart(2, '0')}:${minutes}`
     setCurrentEvent(null)
-    setIsEditing(true)
-    setIsDrawerOpen(true)
-
-    const currentHour = new Date().getHours()
-    const timeFormat = currentHour < 12 ? "AM" : "PM"
-
     setFormData({
-      title: "",
-      date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(
-        selectedDate.getDate(),
-      ).padStart(2, "0")}`,
-      time: "12:00",
-      timeFormat,
-      duration: "60",
-      description: "",
-      isRecurring: false,
-      recurrenceType: "daily",
-      recurrenceEndDate: "",
-    })
-  }
-
-  const handleCreateEventAtTime = (hour: number, minutes: number) => {
-    setCurrentEvent(null)
-    setIsEditing(true)
-    setIsDrawerOpen(true)
-
-    const formattedHour = hour.toString().padStart(2, "0")
-    const formattedTime = `${formattedHour}:${minutes.toString().padStart(2, "0")}`
-    const timeFormat = hour < 12 ? "AM" : "PM"
-
-    setFormData({
-      title: "",
-      date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(
-        selectedDate.getDate(),
-      ).padStart(2, "0")}`,
+      title: '',
+      description: '',
+      date: selectedDate.toISOString().split('T')[0],
       time: formattedTime,
       timeFormat,
-      duration: "60",
-      description: "",
+      duration: 60,
+      location: '',
+      isAllDay: false,
       isRecurring: false,
-      recurrenceType: "daily",
-      recurrenceEndDate: "",
+      recurrenceType: 'daily',
+      recurrenceEndDate: '',
+      participants: []
     })
   }
 
@@ -301,8 +194,11 @@ export function EventDetails({
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }))
+  const handleSelectChange = (field: string, value: string | number | boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
   }
 
   const handleSwitchChange = (name: string, checked: boolean) => {
@@ -321,25 +217,31 @@ export function EventDetails({
       time: formData.time,
       duration: Number(formData.duration),
       description: formData.description,
+      source: currentEvent?.source || "external",
+      location: formData.location || "",
+      isAllDay: formData.isAllDay || false,
+      isGenerated: false,
       ...(formData.isRecurring && {
         recurrenceType: formData.recurrenceType as 'daily' | 'weekly' | 'weekdays' | 'monthly',
         recurrenceEndDate: formData.recurrenceEndDate ? new Date(formData.recurrenceEndDate).toISOString() : undefined,
       }),
       ...(currentEvent && {
-        source: currentEvent.source,
-        fromTask: currentEvent.fromTask,
         priority: currentEvent.priority,
       }),
+      participants: formData.participants
     }
 
+    let updatedEvents: CalendarEvent[]
     if (currentEvent) {
-      const updatedEvents = events.map(event =>
+      updatedEvents = events.map(event =>
         event.id === currentEvent.id ? newEvent : event
       )
-      onUpdateEvents(updatedEvents)
     } else {
-      onUpdateEvents([...events, newEvent])
+      updatedEvents = [...events, newEvent]
     }
+
+    onUpdateEvents(updatedEvents)
+    localStorage.setItem('calendar_events', JSON.stringify(updatedEvents))
 
     toast({
       title: currentEvent ? "Событие обновлено" : "Событие создано",
@@ -355,6 +257,7 @@ export function EventDetails({
 
     const updatedEvents = events.filter(event => event.id !== currentEvent.id)
     onUpdateEvents(updatedEvents)
+    localStorage.setItem('calendar_events', JSON.stringify(updatedEvents))
 
     toast({
       title: "Событие удалено",
@@ -383,7 +286,7 @@ export function EventDetails({
     }
   }
 
-  const handleTaskDragStart = (task: any) => {
+  const handleTaskDragStart = (task: Task) => {
     setDraggedTask(task)
   }
 
@@ -414,7 +317,6 @@ export function EventDetails({
     setDraggedTask(null)
   }
 
-  // Компонент индикатора текущего времени
   const CurrentTimeIndicator = () => {
     const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
@@ -424,7 +326,7 @@ export function EventDetails({
       };
 
       updateTime();
-      const interval = setInterval(updateTime, 60000); // Обновляем каждую минуту
+      const interval = setInterval(updateTime, 60000);
 
       return () => clearInterval(interval);
     }, []);
@@ -452,6 +354,65 @@ export function EventDetails({
       </div>
     );
   };
+
+  const handleAddParticipant = () => {
+    if (newParticipant.name && newParticipant.email) {
+      setFormData(prev => ({
+        ...prev,
+        participants: [...prev.participants, {
+          ...newParticipant,
+          id: newParticipant.name
+        }]
+      }))
+      setNewParticipant({ name: "", email: "" })
+    }
+  }
+
+  const handleRemoveParticipant = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      participants: prev.participants.filter(p => p.id !== id)
+    }))
+  }
+
+  const getStatusColor = (status?: ParticipantStatus) => {
+    switch (status) {
+      case ParticipantStatus.ACCEPTED:
+        return 'bg-green-500/20 text-green-400'
+      case ParticipantStatus.DECLINED:
+        return 'bg-red-500/20 text-red-400'
+      case ParticipantStatus.TENTATIVE:
+        return 'bg-yellow-500/20 text-yellow-400'
+      default:
+        return 'bg-blue-500/20 text-blue-400'
+    }
+  }
+
+  const getStatusText = (status?: ParticipantStatus) => {
+    switch (status) {
+      case ParticipantStatus.ACCEPTED:
+        return 'Принял'
+      case ParticipantStatus.DECLINED:
+        return 'Отклонил'
+      case ParticipantStatus.TENTATIVE:
+        return 'Возможно'
+      default:
+        return 'Ожидает ответа'
+    }
+  }
+
+  // Добавляем эффект для отслеживания изменений formData
+  useEffect(() => {
+    if (formData.participants) {
+      const uniqueParticipants = formData.participants.filter((participant, index, self) =>
+        index === self.findIndex(p => p.name === participant.name)
+      );
+    }
+  }, [formData]);
+
+  // Добавляем эффект для отслеживания изменений currentEvent
+  useEffect(() => {
+  }, [currentEvent]);
 
   return (
     <div className="w-full md:w-2/3 flex flex-col h-[calc(100vh-2rem)]">
@@ -535,9 +496,17 @@ export function EventDetails({
                 const minute = slotMinutes % 60
                 onUpdateEventTime(draggedEvent, hour, minute)
 
+                // Обновляем события в localStorage
+                const updatedEvents = events.map(event =>
+                  event.id === draggedEvent.id
+                    ? { ...event, time: `${hour.toString().padStart(2, "0")}: ${minute.toString().padStart(2, "0")}` }
+                    : event
+                )
+                localStorage.setItem('calendar_events', JSON.stringify(updatedEvents))
+
                 toast({
                   title: "Событие перемещено",
-                  description: `Событие "${draggedEvent.title}" перемещено на ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
+                  description: `Событие "${draggedEvent.title}" перемещено на ${hour.toString().padStart(2, "0")}: ${minute.toString().padStart(2, "0")}`,
                 })
 
                 setDraggedEvent(null)
@@ -596,7 +565,7 @@ export function EventDetails({
                       pointerEvents: 'auto',
                       zIndex: 10
                     }}
-                    onClick={(e: React.MouseEvent) => handleEventClick(event, e)}
+                    onClick={(e: React.MouseEvent) => handleEventClick(event)}
                     draggable={true}
                     onDragStart={(e: React.DragEvent) => handleDragStart(event, e)}
                     onDragEnd={handleDragEnd}
@@ -612,12 +581,14 @@ export function EventDetails({
                           {event.recurrenceType && <Repeat className="h-3 w-3 text-primary/70 inline-block ml-1 flex-shrink-0" />}
                         </div>
                         {height >= 30 && (
-                          <div className={cn(
-                            "text-xs text-white/70 truncate",
-                            isPastEvent && "text-white/40"
-                          )}>
-                            {eventUtils.formatTimeWithAmPm(event.time)} - {eventUtils.formatDuration(event.duration || 60)}
-                          </div>
+                          <>
+                            <div className={cn(
+                              "text-xs text-white/70 truncate",
+                              isPastEvent && "text-white/40"
+                            )}>
+                              {eventUtils.formatTimeWithAmPm(event.time)} - {eventUtils.formatDuration(event.duration || 60)}
+                            </div>
+                          </>
                         )}
                       </div>
                       <div
@@ -656,7 +627,7 @@ export function EventDetails({
                     isHourLine && "border-t border-primary/30"
                   )}
                   style={{ minHeight: `${15 * SLOT_HEIGHT}px`, height: `${15 * SLOT_HEIGHT}px` }}
-                  onClick={() => handleCreateEventAtTime(hour, minute)}
+                  onClick={() => handleTimeClick(`${hour}: ${minute}`)}
                 >
                   <div className="flex-1"></div>
                   <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
@@ -682,7 +653,7 @@ export function EventDetails({
           <DrawerHeader>
             <div className="flex items-center justify-between">
               {currentEvent ? (
-                <DrawerTitle>Редактирование события</DrawerTitle>
+                <DrawerTitle>Событие</DrawerTitle>
               ) : (
                 <DrawerTitle>Новое событие</DrawerTitle>
               )}
@@ -706,46 +677,45 @@ export function EventDetails({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="date" className="text-sm font-medium text-white/70">
-                    Дата
-                  </label>
+              <div className="space-y-2">
+                <label htmlFor="date" className="text-sm font-medium text-white/70">
+                  Дата
+                </label>
+                <Input
+                  id="date"
+                  name="date"
+                  type="date"
+                  value={formData.date}
+                  onChange={handleInputChange}
+                  className="bg-secondary/50 border-primary/20 text-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="time" className="text-sm font-medium text-white/70">
+                  Время
+                </label>
+                <div className="flex gap-2">
                   <Input
-                    id="date"
-                    name="date"
-                    type="date"
-                    value={formData.date}
+                    id="time"
+                    name="time"
+                    type="time"
+                    value={formData.time}
                     onChange={handleInputChange}
-                    className="bg-secondary/50 border-primary/20 text-white"
+                    className="bg-secondary/50 border-primary/20 text-white flex-1"
                   />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="time" className="text-sm font-medium text-white/70">
-                    Время
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="time"
-                      name="time"
-                      type="time"
-                      value={formData.time}
-                      onChange={handleInputChange}
-                      className="bg-secondary/50 border-primary/20 text-white flex-1"
-                    />
-                    <Select
-                      value={formData.timeFormat}
-                      onValueChange={(value) => handleSelectChange("timeFormat", value)}
-                    >
-                      <SelectTrigger className="w-20 bg-secondary/50 border-primary/20 text-white">
-                        <SelectValue placeholder="AM/PM" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#1e1a2e] text-white border-primary/20">
-                        <SelectItem value="AM">AM</SelectItem>
-                        <SelectItem value="PM">PM</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <Select
+                    value={formData.timeFormat}
+                    onValueChange={(value) => handleSelectChange("timeFormat", value)}
+                  >
+                    <SelectTrigger className="w-20 bg-secondary/50 border-primary/20 text-white">
+                      <SelectValue placeholder="AM/PM" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#1e1a2e] text-white border-primary/20">
+                      <SelectItem value="AM">AM</SelectItem>
+                      <SelectItem value="PM">PM</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -753,7 +723,7 @@ export function EventDetails({
                 <label htmlFor="duration" className="text-sm font-medium text-white/70">
                   Длительность
                 </label>
-                <Select value={formData.duration} onValueChange={(value) => handleSelectChange("duration", value)}>
+                <Select value={formData.duration.toString()} onValueChange={(value) => handleSelectChange("duration", Number(value))} >
                   <SelectTrigger className="w-full bg-secondary/50 border-primary/20 text-white">
                     <SelectValue placeholder="Выберите длительность" />
                   </SelectTrigger>
@@ -838,6 +808,72 @@ export function EventDetails({
                   placeholder="Описание события"
                   className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 min-h-[200px]"
                 />
+              </div>
+
+              {/* Секция участников */}
+              <div className="space-y-4 mt-4">
+                <h3 className="text-lg font-medium">Участники</h3>
+                <div className="space-y-2">
+                  {formData.participants && formData.participants.length > 0 ? (
+                    formData.participants
+                      .filter((participant, index, self) =>
+                        index === self.findIndex(p => p.name === participant.name)
+                      )
+                      .map(participant => (
+                        <div key={participant.name} className="flex items-center justify-between p-2 bg-secondary/50 rounded-md">
+                          <div className="flex items-center space-x-2">
+                            {participant.avatar ? (
+                              <img src={participant.avatar} alt={participant.name} className="w-8 h-8 rounded-full" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                                {participant.name[0]}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-medium">{participant.name}</p>
+                              <p className="text-sm text-white/50">{participant.email}</p>
+                              {participant.status && (
+                                <p className={cn(
+                                  "text-xs mt-1 px-2 py-0.5 rounded-full inline-block",
+                                  getStatusColor(participant.status)
+                                )}>
+                                  {getStatusText(participant.status)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveParticipant(participant.id)}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-white/50">Нет участников</p>
+                  )}
+                </div>
+
+                <div className="flex space-x-2">
+                  <Input
+                    placeholder="Имя участника"
+                    value={newParticipant.name}
+                    onChange={(e) => setNewParticipant(prev => ({ ...prev, name: e.target.value }))}
+                    className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
+                  />
+                  <Input
+                    placeholder="Email участника"
+                    value={newParticipant.email}
+                    onChange={(e) => setNewParticipant(prev => ({ ...prev, email: e.target.value }))}
+                    className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
+                  />
+                  <Button onClick={handleAddParticipant}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Добавить
+                  </Button>
+                </div>
               </div>
             </div>
           </DrawerBody>

@@ -18,6 +18,7 @@ import {
     DrawerFooter,
     DrawerClose,
 } from "@/components/ui/drawer"
+import { CalendarEvent, CalendarIntegrationSettings } from "@/lib/types"
 
 const CALENDAR_SETTINGS_KEY = 'calendarIntegrationSettings'
 const SYNC_INTERVAL = 2 // minutes
@@ -35,9 +36,18 @@ interface Calendar {
     id: string
 }
 
+interface CalDAVResponse {
+    calendars: {
+        url: string
+        displayName?: string
+    }[]
+    events?: CalendarEvent[]
+    error?: string
+}
+
 interface CalDAVSyncDialogProps {
-    onSyncComplete: (events: any[]) => void
-    onSettingsSave?: (settings: any) => void
+    onSyncComplete: (events: CalendarEvent[]) => void
+    onSettingsSave?: (settings: CalendarIntegrationSettings) => void
     isOpen?: boolean
     onOpenChange?: (open: boolean) => void
 }
@@ -230,8 +240,6 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
             const startDate = new Date(now.getFullYear() - 1, 0, 1)
             const endDate = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59)
 
-            console.log("Fetching calendars with date range:", { startDate, endDate });
-
             const response = await fetch("/api/caldav-sync", {
                 method: "POST",
                 headers: {
@@ -246,45 +254,33 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
                 }),
             })
 
-            const data = await response.json()
+            const data: CalDAVResponse = await response.json()
 
-            if (!response.ok) {
-                throw new Error(data.error || "Ошибка подключения")
+            if (data.error) {
+                throw new Error(data.error)
             }
 
-            if (data.calendars && data.calendars.length > 0) {
-                const calendars = data.calendars.map((cal: any) => {
-                    const urlParts = cal.url.split('/');
-                    const calendarId = urlParts[urlParts.length - 2];
-                    return {
-                        url: cal.url,
-                        displayName: cal.displayName || "Календарь без имени",
-                        id: calendarId
-                    };
-                });
-
-                console.log("Available calendars:", calendars);
-
-                setAvailableCalendars(calendars);
-                setIsConnectionVerified(true);
-                setFormData(x => ({
-                    ...x,
-                    serverUrl: formData.serverUrl,
-                    username: formData.username,
-                    password: formData.password
-                }));
-
-                toast({
-                    title: "Подключение успешно",
-                    description: `Найдено ${data.calendars.length} календарей. Выберите календарь для синхронизации.`,
-                })
-            } else {
-                toast({
-                    title: "Календари не найдены",
-                    description: "Не удалось найти календари на указанном сервере",
-                    variant: "destructive",
-                })
+            if (!data.calendars || data.calendars.length === 0) {
+                throw new Error("Не найдено доступных календарей")
             }
+
+            const calendars = data.calendars.map(cal => ({
+                url: cal.url,
+                displayName: cal.displayName || "Без названия",
+                id: cal.url
+            }))
+
+            setAvailableCalendars(calendars)
+            setIsConnectionVerified(true)
+
+            if (calendars.length === 1) {
+                setFormData(prev => ({ ...prev, calendarId: calendars[0].url }))
+            }
+
+            toast({
+                title: "Успех",
+                description: "Подключение к календарю установлено",
+            })
         } catch (error) {
             console.error("Ошибка при получении календарей:", error)
             toast({
@@ -300,9 +296,26 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
     const handleSelectChange = (name: string, value: string) => {
         const selectedCalendar = availableCalendars.find(cal => cal.url === value);
         if (selectedCalendar) {
-            console.log("Selected calendar:", selectedCalendar);
             setFormData(x => ({ ...x, [name]: selectedCalendar.id }));
         }
+    }
+
+    const handleSaveSettings = () => {
+        const settings: CalendarIntegrationSettings = {
+            protocol: 'caldav' as const,
+            autoSync: true,
+            syncInterval: SYNC_INTERVAL,
+            caldav: {
+                serverUrl: formData.serverUrl,
+                username: formData.username,
+                password: formData.password,
+                calendarId: formData.calendarId,
+            }
+        }
+        if (onSettingsSave) {
+            onSettingsSave(settings)
+        }
+        setIsOpen(false)
     }
 
     const handleSync = async () => {
@@ -319,7 +332,7 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
 
         try {
             const settings = {
-                protocol: "caldav",
+                protocol: 'caldav' as const,
                 autoSync: true,
                 syncInterval: SYNC_INTERVAL,
                 caldav: {
@@ -338,9 +351,6 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
             const startDate = new Date(now.getFullYear() - 1, 0, 1)
             const endDate = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59)
 
-            console.log("Syncing calendar with ID:", formData.calendarId);
-            console.log("Date range:", { startDate, endDate });
-
             const response = await fetch("/api/caldav-sync", {
                 method: "POST",
                 headers: {
@@ -357,7 +367,6 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
             })
 
             const data = await response.json()
-            console.log(data)
 
             if (!response.ok) {
                 throw new Error(data.error || "Ошибка синхронизации")

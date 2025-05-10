@@ -55,7 +55,7 @@ export function EventDrawer({
                 <DrawerHeader>
                     <div className="flex items-center justify-between">
                         {currentEvent ? (
-                            <DrawerTitle>Редактирование события</DrawerTitle>
+                            <DrawerTitle>Событие</DrawerTitle>
                         ) : (
                             <DrawerTitle>Новое событие</DrawerTitle>
                         )}

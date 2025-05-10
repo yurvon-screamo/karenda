@@ -1,6 +1,6 @@
 import { DAVClient } from 'tsdav';
 import { parseStringPromise } from 'xml2js';
-import { CalendarEvent } from './types';
+import { CalendarEvent, ParticipantStatus, ParticipantRole } from './types';
 
 interface Event {
   id: string;
@@ -9,6 +9,15 @@ interface Event {
   end: Date;
   description?: string;
   location?: string;
+  participants?: {
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+    status?: ParticipantStatus;
+    role?: ParticipantRole;
+    isOrganizer: boolean;
+  }[];
 }
 
 interface Calendar {
@@ -18,27 +27,10 @@ interface Calendar {
 }
 
 // Интерфейс для учетных данных CalDAV
-export interface CalDAVCredentialsProps {
+interface CalDAVCredentialsProps {
   serverUrl: string
   username: string
   password: string
-}
-
-// Интерфейс для событий из CalDAV
-export interface CalDAVEvent {
-  id: string
-  title: string
-  start: Date
-  end: Date
-  location?: string
-  description?: string
-  isAllDay: boolean
-}
-
-// Интерфейс для ответа календаря
-interface CalendarResponse {
-  data: string;
-  url: string;
 }
 
 // Класс для работы с CalDAV
@@ -51,14 +43,9 @@ export class CalDAVClient {
     private username: string,
     private password: string
   ) {
-    // Убедимся, что URL заканчивается на /
     if (!this.serverUrl.endsWith('/')) {
       this.serverUrl += '/';
     }
-    console.log('Initialized CalDAV client with:', {
-      serverUrl: this.serverUrl,
-      username: this.username
-    });
   }
 
   async connect(): Promise<void> {
@@ -78,7 +65,6 @@ export class CalDAVClient {
       });
 
       await this.client.login();
-      console.log('CalDAV client connected successfully');
     } catch (error) {
       console.error('Failed to connect to CalDAV server:', error);
       throw error;
@@ -91,7 +77,6 @@ export class CalDAVClient {
     }
 
     try {
-      // Формируем XML запрос для получения списка календарей
       const xmlRequest = `<?xml version="1.0" encoding="utf-8"?>
 <D:propfind xmlns:D="DAV:">
   <D:prop>
@@ -102,14 +87,6 @@ export class CalDAVClient {
 </D:propfind>`;
 
       const calendarUrl = `${this.serverUrl}calendars/${this.username}@yandex.ru/`;
-      console.log('Requesting calendars from URL:', calendarUrl);
-      console.log('Request headers:', {
-        'Depth': '1',
-        'Content-Type': 'application/xml; charset=utf-8',
-        'Authorization': 'Basic ' + btoa(`${this.username}:${this.password}`).substring(0, 10) + '...'
-      });
-      console.log('Request body:', xmlRequest);
-
       const response = await fetch(calendarUrl, {
         method: 'PROPFIND',
         headers: {
@@ -120,22 +97,14 @@ export class CalDAVClient {
         body: xmlRequest
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
 
       const responseText = await response.text();
-      console.log('CalDAV calendars response:', responseText);
-
-      // Парсим ответ
       const calendars: Calendar[] = [];
       const result = await parseStringPromise(responseText);
-      console.log('Parsed XML structure:', JSON.stringify(result, null, 2));
 
       if (result['D:multistatus'] && result['D:multistatus']['D:response']) {
         const responses = Array.isArray(result['D:multistatus']['D:response'])
@@ -147,13 +116,6 @@ export class CalDAVClient {
           const displayName = response['D:propstat']?.[0]?.['D:prop']?.[0]?.['D:displayname']?.[0];
           const resourceType = response['D:propstat']?.[0]?.['D:prop']?.[0]?.['D:resourcetype']?.[0];
 
-          console.log('Processing response:', {
-            href,
-            displayName,
-            resourceType
-          });
-
-          // Проверяем, что это календарь (содержит C:calendar)
           if (href && resourceType && resourceType['C:calendar']) {
             const urlParts = href.split('/');
             const calendarId = urlParts[urlParts.length - 2];
@@ -167,7 +129,6 @@ export class CalDAVClient {
         }
       }
 
-      console.log('Parsed calendars:', calendars);
       return calendars;
     } catch (error) {
       console.error('Failed to get calendars:', error);
@@ -182,9 +143,7 @@ export class CalDAVClient {
 
     try {
       const calendarUrl = `${this.serverUrl}calendars/${this.username}@yandex.ru/${calendarId}/`;
-      console.log('Calendar URL:', calendarUrl);
 
-      // Формируем XML запрос
       const xmlRequest = `<?xml version="1.0" encoding="utf-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
   <d:prop>
@@ -200,7 +159,6 @@ export class CalDAVClient {
   </c:filter>
 </c:calendar-query>`;
 
-      // Отправляем REPORT запрос
       const response = await fetch(calendarUrl, {
         method: 'REPORT',
         headers: {
@@ -213,17 +171,12 @@ export class CalDAVClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
 
       const responseText = await response.text();
-      console.log('CalDAV response:', responseText);
-
-      // Парсим ответ
       const events: Event[] = [];
       const result = await parseStringPromise(responseText);
-      console.log('Parsed XML structure:', JSON.stringify(result, null, 2));
 
       if (result['D:multistatus'] && result['D:multistatus']['D:response']) {
         const responses = Array.isArray(result['D:multistatus']['D:response'])
@@ -248,25 +201,42 @@ export class CalDAVClient {
                   events.push(event as Event);
                 }
               } else if (inEvent) {
-                let [key, value] = line.replace("http:", "http").replace("https:", "https").split(':');
-                value = value.replace("http//", "http://").replace("https//", "https://")
-                if (key.startsWith('DTSTART;TZID=Europe/Moscow')) {
-                  console.log('Parsing start date:', { key, value });
+                let [key, ...valueParts] = line.split(':');
+                let value = valueParts.join(':');
+
+                if (key.startsWith('ATTENDEE') || key.startsWith('ORGANIZER')) {
+                  const attendeeParams = key.split(';').slice(1);
+                  const name = attendeeParams.find((p: string) => p.startsWith('CN='))?.split('=')[1] || '';
+                  const statusParam = attendeeParams.find((p: string) => p.startsWith('PARTSTAT='))?.split('=')[1];
+                  const roleParam = attendeeParams.find((p: string) => p.startsWith('ROLE='))?.split('=')[1];
+
+                  const email = value.replace(/^mailto:/, '');
+                  const cleanName = name.replace(/^["']|["']$/g, '');
+
+                  if (!event.participants) {
+                    event.participants = [];
+                  }
+
+                  event.participants.push({
+                    id: email,
+                    name: decodeURIComponent(cleanName),
+                    email: email,
+                    avatar: `https://www.gravatar.com/avatar/${email}?d=identicon&s=200`,
+                    status: statusParam as ParticipantStatus,
+                    role: roleParam as ParticipantRole,
+                    isOrganizer: key.startsWith('ORGANIZER')
+                  });
+                } else if (key.startsWith('DTSTART;TZID=Europe/Moscow')) {
                   const [year, month, day, hour, minute, second] = value.match(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/)?.slice(1) || [];
                   if (year && month && day && hour && minute && second) {
                     const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}+03:00`;
-                    console.log('Formatted start date string:', dateStr);
                     event.start = new Date(dateStr);
-                    console.log('Parsed start date:', event.start);
                   }
                 } else if (key.startsWith('DTEND;TZID=Europe/Moscow')) {
-                  console.log('Parsing end date:', { key, value });
                   const [year, month, day, hour, minute, second] = value.match(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/)?.slice(1) || [];
                   if (year && month && day && hour && minute && second) {
                     const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}+03:00`;
-                    console.log('Formatted end date string:', dateStr);
                     event.end = new Date(dateStr);
-                    console.log('Parsed end date:', event.end);
                   }
                 } else if (key === 'SUMMARY') {
                   event.summary = value.replace(/\r$/, '');
@@ -283,11 +253,10 @@ export class CalDAVClient {
         }
       }
 
-      // Преобразуем события в формат CalendarEvent
       const calendarEvents = events.map(event => {
         const startDate = event.start;
         const endDate = event.end;
-        const duration = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60)); // в минутах
+        const duration = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60));
 
         return {
           id: event.id,
@@ -298,11 +267,19 @@ export class CalDAVClient {
           description: event.description || '',
           location: event.location,
           source: 'caldav' as const,
-          isAllDay: false
+          isAllDay: false,
+          participants: event.participants?.map(p => ({
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            avatar: p.avatar,
+            status: p.status,
+            role: p.role,
+            isOrganizer: p.isOrganizer
+          })) || []
         };
       });
 
-      console.log('Converted calendar events:', calendarEvents);
       return calendarEvents;
     } catch (error) {
       console.error('Failed to get calendar events:', error);

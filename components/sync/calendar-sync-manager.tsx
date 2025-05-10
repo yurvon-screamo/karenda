@@ -14,30 +14,14 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
-
-interface IntegrationSettingsType {
-  protocol: "ews" | "caldav"
-  autoSync: boolean
-  syncInterval: number
-  ews?: {
-    email: string
-    password: string
-    serverUrl?: string
-  }
-  caldav?: {
-    serverUrl: string
-    username: string
-    password: string
-    calendarId: string
-  }
-}
+import { CalendarEvent, CalendarIntegrationSettings } from "@/lib/types"
 
 interface CalendarSyncManagerProps {
-  onSyncComplete: (events: any[]) => void
+  onSyncComplete: (events: CalendarEvent[]) => void
 }
 
 export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps) {
-  const [settings, setSettings] = useState<IntegrationSettingsType | null>(null)
+  const [settings, setSettings] = useState<CalendarIntegrationSettings | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [selectedProtocol, setSelectedProtocol] = useState<"ews" | "caldav" | null>(null)
@@ -70,11 +54,9 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
     setIsSettingsOpen(true)
   }
 
-  const handleSaveSettings = (newSettings: IntegrationSettingsType) => {
+  const handleSaveSettings = (newSettings: CalendarIntegrationSettings) => {
     setSettings(newSettings)
     localStorage.setItem("calendarIntegrationSettings", JSON.stringify(newSettings))
-    // setIsSettingsOpen(false)
-    // setSelectedProtocol(null)
   }
 
   const handleCloseSettings = () => {
@@ -186,7 +168,6 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
       throw new Error(data.error || "Ошибка синхронизации с CalDAV")
     }
 
-    console.log("data", data)
     // Передаем события в родительский компонент
     onSyncComplete(data.events)
 

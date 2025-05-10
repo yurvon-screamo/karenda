@@ -17,6 +17,7 @@ import {
     DrawerFooter,
     DrawerClose,
 } from "@/components/ui/drawer"
+import { CalendarEvent, CalendarIntegrationSettings } from "@/lib/types"
 
 const CALENDAR_SETTINGS_KEY = 'calendarIntegrationSettings'
 const SYNC_INTERVAL = 2 // minutes
@@ -28,8 +29,8 @@ interface EWSFormData {
 }
 
 interface OutlookSyncDialogProps {
-    onSyncComplete: (events: any[]) => void
-    onSettingsSave?: (settings: any) => void
+    onSyncComplete: (events: CalendarEvent[]) => void
+    onSettingsSave?: (settings: CalendarIntegrationSettings) => void
     isOpen?: boolean
     onOpenChange?: (open: boolean) => void
 }
@@ -244,6 +245,23 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
         }
     }
 
+    const handleSaveSettings = () => {
+        const settings: CalendarIntegrationSettings = {
+            protocol: 'ews' as const,
+            autoSync: true,
+            syncInterval: SYNC_INTERVAL,
+            ews: {
+                email: formData.email,
+                password: formData.password,
+                serverUrl: formData.serverUrl,
+            }
+        }
+        if (onSettingsSave) {
+            onSettingsSave(settings)
+        }
+        setIsOpen(false)
+    }
+
     const handleSync = async () => {
         if (!formData.email || !formData.password) {
             toast({
@@ -258,7 +276,7 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
 
         try {
             const settings = {
-                protocol: "ews",
+                protocol: 'ews' as const,
                 autoSync: true,
                 syncInterval: SYNC_INTERVAL,
                 ews: {

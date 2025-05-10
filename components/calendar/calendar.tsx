@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui"
 import { useToast } from "@/hooks/use-toast"
 import { CalendarEvent } from "@/lib/types"
+import { WEEKDAYS, MONTH_NAMES } from "./event-details/constants"
 
 interface CalendarProps {
   selectedDate: Date
@@ -17,13 +18,6 @@ interface CalendarProps {
   draggedEvent: CalendarEvent | null
   events: CalendarEvent[]
 }
-
-// Константы
-const WEEKDAYS = ["ВС", "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ"]
-const MONTH_NAMES = [
-  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
-]
 
 // Утилиты для работы с датами
 const dateUtils = {

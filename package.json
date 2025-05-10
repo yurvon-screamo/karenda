@@ -1,12 +1,15 @@
 {
-  "name": "personal-calendar",
+  "name": "karenda",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && next export",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "tauri": "tauri",
+    "desktop": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.5",
@@ -31,6 +34,7 @@
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0",
     "@types/node": "^20.11.30",
     "@types/react": "^18.2.67",
     "@types/react-dom": "^18.2.22",

@@ -5,19 +5,19 @@ import { Calendar } from "@/components/calendar/calendar"
 import { EventDetails } from "@/components/calendar/event-details"
 import { BackgroundGradient } from "@/components/ui/background-gradient"
 import { useToast } from "@/hooks/use-toast"
-import { CalendarEvent } from "@/lib/types"
+import { CalendarEvent, Task } from "@/lib/types"
 import { LocalCalendarStorage } from "@/lib/storage"
+import { notificationUtils } from "@/lib/notifications"
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null)
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
-  const [tasks, setTasks] = useState<CalendarEvent[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
   const { toast } = useToast()
   const storage = new LocalCalendarStorage()
 
-  // Загрузка событий при монтировании компонента
   useEffect(() => {
     const loadEvents = async () => {
       try {
@@ -133,9 +133,7 @@ export default function Home() {
     setCalendarEvents(updatedEvents)
   }
 
-  // Обработчик преобразования задачи в событие
-  const handleConvertTaskToEvent = async (task: any, hour: number, minute: number) => {
-    // Создаем новое событие на основе задачи
+  const handleConvertTaskToEvent = async (task: Task, hour: number, minute: number) => {
     const eventDate = new Date(selectedDate)
     eventDate.setHours(hour, minute, 0, 0)
 
@@ -146,8 +144,9 @@ export default function Home() {
       time: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
       duration: 60, // По умолчанию 1 час
       description: task.description || "",
-      fromTask: true, // Отмечаем, что событие создано из задачи
-      priority: task.priority, // Сохраняем приоритет из задачи
+      priority: task.priority,
+      source: "task",
+      participants: []
     }
 
     // Добавляем новое событие
@@ -165,49 +164,10 @@ export default function Home() {
   }
 
   // Обработчик добавления новых событий при синхронизации
-  const handleSyncComplete = async (syncedEvents: any[]) => {
-    // Преобразуем события из внешних источников в формат нашего приложения
-    const formattedEvents: CalendarEvent[] = syncedEvents.map((event, index) => {
-      // Если событие уже в нужном формате, используем его как есть
-      if (event.date && event.time) {
-        return {
-          id: event.id || `synced-${index}-${Date.now()}`,
-          title: event.title,
-          date: event.date,
-          time: event.time,
-          duration: event.duration,
-          description: event.description ? event.description.split('\\n\\n')[0] : "",
-          source: event.source || "external",
-          location: event.location,
-          isAllDay: event.isAllDay,
-        }
-      }
-
-      // Иначе пытаемся преобразовать даты
-      const startDate = event.start instanceof Date ? event.start : new Date(event.start);
-      const endDate = event.end instanceof Date ? event.end : new Date(event.end);
-
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        console.error('Invalid date detected:', { start: event.start, end: event.end });
-        return null;
-      }
-
-      return {
-        id: event.id || `synced-${index}-${Date.now()}`,
-        title: event.title,
-        date: startDate.toISOString().split('T')[0],
-        time: `${startDate.getHours().toString().padStart(2, "0")}:${startDate.getMinutes().toString().padStart(2, "0")}`,
-        duration: Math.round((endDate.getTime() - startDate.getTime()) / 60000), // длительность в минутах
-        description: event.description ? event.description.split('\\n\\n')[0] : "",
-        source: event.source || "external",
-        location: event.location,
-        isAllDay: event.isAllDay,
-      }
-    }).filter(Boolean) as CalendarEvent[];
-
+  const handleSyncComplete = async (syncedEvents: CalendarEvent[]) => {
     // Объединяем с существующими событиями, исключая дубликаты
     const existingIds = new Set(calendarEvents.map((e) => e.id))
-    const newEvents = formattedEvents.filter((e) => !existingIds.has(e.id))
+    const newEvents = syncedEvents.filter((e) => !existingIds.has(e.id))
 
     setCalendarEvents([...calendarEvents, ...newEvents])
   }
@@ -298,6 +258,18 @@ export default function Home() {
       .map((e) => JSON.stringify(e))
       .join(),
   ])
+
+  useEffect(() => {
+    // Запрашиваем разрешение на уведомления при загрузке страницы
+    notificationUtils.requestPermission()
+
+    // Проверяем уведомления каждую минуту
+    const notificationInterval = setInterval(() => {
+      notificationUtils.checkEventNotifications(calendarEvents)
+    }, 60000)
+
+    return () => clearInterval(notificationInterval)
+  }, [calendarEvents])
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
