@@ -20,7 +20,7 @@ export interface CalendarEvent {
     description: string
     recurrenceType?: 'daily' | 'weekly' | 'weekdays' | 'monthly'
     recurrenceEndDate?: string
-    source: 'outlook' | 'caldav' | 'external' | 'task'
+    source: 'outlook' | 'caldav' | 'task' | 'default'
     location?: string
     isAllDay?: boolean
     isGenerated?: boolean

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
 import { CalendarEvent, CalendarIntegrationSettings } from "@/lib/types"
+import { CalendarRepository } from "@/lib/calendar-repository"
 
 interface CalendarSyncManagerProps {
   onSyncComplete: (events: CalendarEvent[]) => void
@@ -26,6 +27,7 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [selectedProtocol, setSelectedProtocol] = useState<"ews" | "caldav" | null>(null)
   const { toast } = useToast()
+  const calendarRepo = CalendarRepository.getInstance()
 
   useEffect(() => {
     const savedSettings = localStorage.getItem("calendarIntegrationSettings")
@@ -77,11 +79,16 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
     setIsSyncing(true)
 
     try {
+      let syncedEvents: CalendarEvent[] = []
+
       if (settings.protocol === "ews") {
-        await syncWithEWS()
+        syncedEvents = await syncWithEWS()
       } else if (settings.protocol === "caldav") {
-        await syncWithCalDAV()
+        syncedEvents = await syncWithCalDAV()
       }
+
+      const events = await calendarRepo.syncEvents(syncedEvents)
+      onSyncComplete(events)
     } catch (error) {
       console.error("Ошибка синхронизации:", error)
       toast({
@@ -95,7 +102,7 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
   }
 
   // Синхронизация с EWS
-  const syncWithEWS = async () => {
+  const syncWithEWS = async (): Promise<CalendarEvent[]> => {
     if (!settings?.ews?.email || !settings?.ews?.password) {
       throw new Error("Отсутствуют учетные данные EWS")
     }
@@ -126,17 +133,16 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
       throw new Error(data.error || "Ошибка синхронизации с EWS")
     }
 
-    // Передаем события в родительский компонент
-    onSyncComplete(data.events)
-
     toast({
       title: "Синхронизация завершена",
       description: `Получено ${data.events.length} событий из Exchange`,
     })
+
+    return data.events
   }
 
   // Синхронизация с CalDAV
-  const syncWithCalDAV = async () => {
+  const syncWithCalDAV = async (): Promise<CalendarEvent[]> => {
     if (!settings?.caldav?.serverUrl || !settings?.caldav?.username || !settings?.caldav?.password) {
       throw new Error("Отсутствуют учетные данные CalDAV")
     }
@@ -168,13 +174,12 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
       throw new Error(data.error || "Ошибка синхронизации с CalDAV")
     }
 
-    // Передаем события в родительский компонент
-    onSyncComplete(data.events)
-
     toast({
       title: "Синхронизация завершена",
       description: `Получено ${data.events.length} событий из CalDAV`,
     })
+
+    return data.events
   }
 
   // Автоматическая синхронизация при загрузке

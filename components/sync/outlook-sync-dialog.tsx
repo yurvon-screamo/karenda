@@ -316,7 +316,17 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
                 throw new Error(data.error || "Ошибка синхронизации")
             }
 
-            onSyncComplete(data.events)
+            // Получаем существующие ручные события
+            const manualEventsStr = localStorage.getItem("manualCalendarEvents")
+            const manualEvents: CalendarEvent[] = manualEventsStr ? JSON.parse(manualEventsStr) : []
+
+            // Сохраняем синхронизированные события отдельно
+            localStorage.setItem("syncedCalendarEvents", JSON.stringify(data.events))
+
+            // Объединяем ручные и синхронизированные события
+            const allEvents = [...manualEvents, ...data.events]
+
+            onSyncComplete(allEvents)
 
             toast({
                 title: "Синхронизация завершена",
@@ -328,7 +338,7 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
             console.error("Ошибка синхронизации:", error)
             toast({
                 title: "Ошибка синхронизации",
-                description: error instanceof Error ? error.message : "Произошла ошибка при синхронизации с Outlook",
+                description: error instanceof Error ? error.message : "Произошла ошибка при синхронизации",
                 variant: "destructive",
             })
         } finally {

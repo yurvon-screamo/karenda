@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Trash2, X, Save, GripVertical, Repeat, Pencil, UserPlus, UserMinus } from "lucide-react"
+import { Trash2, X, Save, GripVertical, Repeat, Pencil, UserPlus, UserMinus, Lock } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { Textarea } from "../ui/textarea"
@@ -26,6 +26,7 @@ import { DayTasks } from "@/components/calendar/day-tasks"
 import { CalendarEvent, Task, ParticipantStatus, ParticipantRole } from "@/lib/types"
 import { eventUtils } from "./event-details/utils"
 import { SLOT_HEIGHT, WEEKDAYS, MONTH_NAMES } from "./event-details/constants"
+import { EventTimeSettings } from "./event-details/EventTimeSettings"
 
 interface EventDetailsProps {
   selectedDate: Date
@@ -147,7 +148,7 @@ export function EventDetails({
     const timeFormat = parseInt(hours) >= 12 ? 'PM' as const : 'AM' as const
     const newFormData = {
       title: event.title,
-      description: event.description || '',
+      description: event.description.trim() || '',
       date: event.date,
       time: event.time,
       timeFormat,
@@ -217,7 +218,7 @@ export function EventDetails({
       time: formData.time,
       duration: Number(formData.duration),
       description: formData.description,
-      source: currentEvent?.source || "external",
+      source: currentEvent?.source || "default",
       location: formData.location || "",
       isAllDay: formData.isAllDay || false,
       isGenerated: false,
@@ -401,18 +402,14 @@ export function EventDetails({
     }
   }
 
-  // Добавляем эффект для отслеживания изменений formData
+  // Авто-рост textarea для описания
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    if (formData.participants) {
-      const uniqueParticipants = formData.participants.filter((participant, index, self) =>
-        index === self.findIndex(p => p.name === participant.name)
-      );
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
     }
-  }, [formData]);
-
-  // Добавляем эффект для отслеживания изменений currentEvent
-  useEffect(() => {
-  }, [currentEvent]);
+  }, [formData.description]);
 
   return (
     <div className="w-full md:w-2/3 flex flex-col h-[calc(100vh-2rem)]">
@@ -552,7 +549,7 @@ export function EventDetails({
                       "absolute text-left px-1.5 py-0.5 rounded transition-all mb-0.5 group shadow-lg",
                       "bg-primary/10 hover:bg-primary/15",
                       event.source === "outlook" && "border-l-4 border-blue-500",
-                      event.source === "external" && "border-l-4 border-purple-500",
+                      event.source === "caldav" && "border-l-4 border-purple-500",
                       event.recurrenceType && "border-r-4 border-r-primary/50",
                       isPastEvent && "opacity-50 grayscale hover:opacity-70",
                       "cursor-grab active:cursor-grabbing"
@@ -648,20 +645,55 @@ export function EventDetails({
       </div>
 
       {/* Дровер для просмотра и редактирования события */}
-      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen} direction="right">
+      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen} direction="right" width="w-[1000px]">
         <DrawerContent>
           <DrawerHeader>
-            <div className="flex items-center justify-between">
-              {currentEvent ? (
-                <DrawerTitle>Событие</DrawerTitle>
-              ) : (
-                <DrawerTitle>Новое событие</DrawerTitle>
-              )}
-              <DrawerClose onClick={handleCloseDrawer} />
+            <div className="flex items-center justify-between gap-2 w-full">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {currentEvent ? (
+                  <>
+                    <DrawerTitle>Событие</DrawerTitle>
+                    {(currentEvent.source === "outlook" || currentEvent.source === "caldav") && (
+                      <div className="flex items-center gap-1 text-sm text-white/50">
+                        <Lock className="h-4 w-4" />
+                        <span>Только для чтения</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <DrawerTitle>Новое событие</DrawerTitle>
+                )}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+                {currentEvent && !(currentEvent.source === "outlook" || currentEvent.source === "caldav") && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-red-500/10"
+                    onClick={handleDeleteEvent}
+                    title="Удалить"
+                  >
+                    <Trash2 className="h-5 w-5 text-red-400" />
+                  </Button>
+                )}
+                {!(currentEvent?.source === "outlook" || currentEvent?.source === "caldav") && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleSaveEvent}
+                    title="Сохранить"
+                    disabled={!formData.title.trim()}
+                  >
+                    <Save className="h-5 w-5" />
+                  </Button>
+                )}
+                <DrawerClose className="h-8 w-8" onClick={handleCloseDrawer} />
+              </div>
             </div>
           </DrawerHeader>
 
-          <DrawerBody>
+          <DrawerBody className="custom-scrollbar">
             <div className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="title" className="text-sm font-medium text-white/70">
@@ -674,126 +706,8 @@ export function EventDetails({
                   onChange={handleInputChange}
                   placeholder="Название события"
                   className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
+                  readOnly={currentEvent?.source === "outlook" || currentEvent?.source === "caldav"}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="date" className="text-sm font-medium text-white/70">
-                  Дата
-                </label>
-                <Input
-                  id="date"
-                  name="date"
-                  type="date"
-                  value={formData.date}
-                  onChange={handleInputChange}
-                  className="bg-secondary/50 border-primary/20 text-white"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="time" className="text-sm font-medium text-white/70">
-                  Время
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    id="time"
-                    name="time"
-                    type="time"
-                    value={formData.time}
-                    onChange={handleInputChange}
-                    className="bg-secondary/50 border-primary/20 text-white flex-1"
-                  />
-                  <Select
-                    value={formData.timeFormat}
-                    onValueChange={(value) => handleSelectChange("timeFormat", value)}
-                  >
-                    <SelectTrigger className="w-20 bg-secondary/50 border-primary/20 text-white">
-                      <SelectValue placeholder="AM/PM" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#1e1a2e] text-white border-primary/20">
-                      <SelectItem value="AM">AM</SelectItem>
-                      <SelectItem value="PM">PM</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="duration" className="text-sm font-medium text-white/70">
-                  Длительность
-                </label>
-                <Select value={formData.duration.toString()} onValueChange={(value) => handleSelectChange("duration", Number(value))} >
-                  <SelectTrigger className="w-full bg-secondary/50 border-primary/20 text-white">
-                    <SelectValue placeholder="Выберите длительность" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#1e1a2e] text-white border-primary/20">
-                    <SelectItem value="15">15 минут</SelectItem>
-                    <SelectItem value="30">30 минут</SelectItem>
-                    <SelectItem value="45">45 минут</SelectItem>
-                    <SelectItem value="60">1 час</SelectItem>
-                    <SelectItem value="90">1.5 часа</SelectItem>
-                    <SelectItem value="120">2 часа</SelectItem>
-                    <SelectItem value="180">3 часа</SelectItem>
-                    <SelectItem value="240">4 часа</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Настройки повторения */}
-              <div className="pt-4 border-t border-primary/10">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="isRecurring" className="text-white/70">
-                      Повторяющееся событие
-                    </Label>
-                    <p className="text-xs text-white/50">Настройте регулярное повторение события</p>
-                  </div>
-                  <Switch
-                    id="isRecurring"
-                    checked={formData.isRecurring}
-                    onCheckedChange={(checked) => handleSwitchChange("isRecurring", checked)}
-                  />
-                </div>
-
-                {formData.isRecurring && (
-                  <div className="space-y-4 mt-4 pl-2 border-l-2 border-primary/20">
-                    <div className="space-y-2">
-                      <label htmlFor="recurrenceType" className="text-sm font-medium text-white/70">
-                        Тип повторения
-                      </label>
-                      <Select
-                        value={formData.recurrenceType}
-                        onValueChange={(value) => handleSelectChange("recurrenceType", value)}
-                      >
-                        <SelectTrigger className="w-full bg-secondary/50 border-primary/20 text-white">
-                          <SelectValue placeholder="Выберите тип повторения" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[#1e1a2e] text-white border-primary/20">
-                          <SelectItem value="daily">Ежедневно</SelectItem>
-                          <SelectItem value="weekly">Еженедельно</SelectItem>
-                          <SelectItem value="weekdays">По рабочим дням</SelectItem>
-                          <SelectItem value="monthly">Ежемесячно</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label htmlFor="recurrenceEndDate" className="text-sm font-medium text-white/70">
-                        Дата окончания (необязательно)
-                      </label>
-                      <Input
-                        id="recurrenceEndDate"
-                        name="recurrenceEndDate"
-                        type="date"
-                        value={formData.recurrenceEndDate}
-                        onChange={handleInputChange}
-                        className="bg-secondary/50 border-primary/20 text-white"
-                      />
-                      <p className="text-xs text-white/50">Оставьте пустым для бессрочного повторения</p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="space-y-2">
@@ -806,104 +720,106 @@ export function EventDetails({
                   value={formData.description}
                   onChange={handleInputChange}
                   placeholder="Описание события"
-                  className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 min-h-[200px]"
+                  className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 resize-none overflow-hidden"
+                  ref={textareaRef}
+                  style={{ minHeight: '40px', maxHeight: 'none' }}
+                  rows={1}
+                  readOnly={currentEvent?.source === "outlook" || currentEvent?.source === "caldav"}
                 />
               </div>
 
+              <EventTimeSettings
+                date={formData.date}
+                time={formData.time}
+                timeFormat={formData.timeFormat}
+                duration={formData.duration.toString()}
+                isRecurring={formData.isRecurring}
+                recurrenceType={formData.recurrenceType ? formData.recurrenceType : ""}
+                recurrenceEndDate={formData.recurrenceEndDate ? formData.recurrenceEndDate : ""}
+                onInputChange={handleInputChange}
+                onSelectChange={handleSelectChange}
+                onSwitchChange={handleSwitchChange}
+                isReadOnly={currentEvent?.source === "outlook" || currentEvent?.source === "caldav"}
+              />
+
               {/* Секция участников */}
-              <div className="space-y-4 mt-4">
-                <h3 className="text-lg font-medium">Участники</h3>
-                <div className="space-y-2">
+              <div className="space-y-2 mt-2">
+                <h3 className="text-base font-medium">Участники</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
                   {formData.participants && formData.participants.length > 0 ? (
-                    formData.participants
-                      .filter((participant, index, self) =>
-                        index === self.findIndex(p => p.name === participant.name)
-                      )
-                      .map(participant => (
-                        <div key={participant.name} className="flex items-center justify-between p-2 bg-secondary/50 rounded-md">
-                          <div className="flex items-center space-x-2">
+                    <>
+                      {formData.participants
+                        .filter((participant, index, self) =>
+                          index === self.findIndex(p => p.name === participant.name)
+                        )
+                        .map(participant => (
+                          <div key={participant.name} className="bg-secondary/40 hover:bg-secondary/60 transition-colors rounded-lg p-2 relative group flex flex-col items-center text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-900/30 hover:bg-red-900/50"
+                              onClick={() => handleRemoveParticipant(participant.id)}
+                            >
+                              <UserMinus className="h-3 w-3 text-red-300" />
+                            </Button>
                             {participant.avatar ? (
-                              <img src={participant.avatar} alt={participant.name} className="w-8 h-8 rounded-full" />
+                              <img
+                                src={participant.avatar}
+                                alt={participant.name}
+                                className="w-8 h-8 rounded-full border border-primary/20 mb-1"
+                              />
                             ) : (
-                              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                {participant.name[0]}
+                              <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center text-base font-semibold mb-1 border border-primary/10">
+                                {participant.name.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <div>
-                              <p className="font-medium">{participant.name}</p>
-                              <p className="text-sm text-white/50">{participant.email}</p>
-                              {participant.status && (
-                                <p className={cn(
-                                  "text-xs mt-1 px-2 py-0.5 rounded-full inline-block",
-                                  getStatusColor(participant.status)
-                                )}>
-                                  {getStatusText(participant.status)}
-                                </p>
-                              )}
-                            </div>
+                            <p className="font-medium text-xs truncate max-w-full leading-tight">{participant.name}</p>
+                            <p className="text-[10px] text-white/50 truncate max-w-full mb-1 leading-tight">{participant.email}</p>
+                            {participant.status && (
+                              <span className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded-full",
+                                getStatusColor(participant.status)
+                              )}>
+                                {getStatusText(participant.status)}
+                              </span>
+                            )}
+                            {participant.role && (
+                              <span className="text-[10px] text-white/50 mt-0.5">
+                                {participant.role === ParticipantRole.CHAIR ? "Организатор" :
+                                  participant.role === ParticipantRole.REQ_PARTICIPANT ? "Обязательный" : "Необязательный"}
+                              </span>
+                            )}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveParticipant(participant.id)}
-                          >
-                            <UserMinus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))
+                        ))}
+                      {/* Карточка для добавления нового участника */}
+                      <div className="bg-secondary/30 border-2 border-dashed border-primary/20 rounded-lg p-2 flex flex-col items-center justify-center text-center min-h-[110px]">
+                        <Input
+                          placeholder="Имя участника"
+                          value={newParticipant.name}
+                          onChange={(e) => setNewParticipant(prev => ({ ...prev, name: e.target.value }))}
+                          className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 mb-1 text-xs px-2 py-1 h-7"
+                        />
+                        <Input
+                          placeholder="Email участника"
+                          value={newParticipant.email}
+                          onChange={(e) => setNewParticipant(prev => ({ ...prev, email: e.target.value }))}
+                          className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40 mb-2 text-xs px-2 py-1 h-7"
+                        />
+                        <Button onClick={handleAddParticipant} variant="outline" className="h-7 text-xs w-full flex items-center justify-center gap-1 border-primary/30 hover:bg-primary/10 transition-colors">
+                          <UserPlus className="h-4 w-4" />
+                          <span>Добавить</span>
+                        </Button>
+                      </div>
+                    </>
                   ) : (
-                    <p className="text-white/50">Нет участников</p>
+                    <div className="col-span-full text-center p-4 border border-dashed border-primary/20 rounded-lg">
+                      <p className="text-white/50">Нет участников</p>
+                    </div>
                   )}
-                </div>
-
-                <div className="flex space-x-2">
-                  <Input
-                    placeholder="Имя участника"
-                    value={newParticipant.name}
-                    onChange={(e) => setNewParticipant(prev => ({ ...prev, name: e.target.value }))}
-                    className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                  />
-                  <Input
-                    placeholder="Email участника"
-                    value={newParticipant.email}
-                    onChange={(e) => setNewParticipant(prev => ({ ...prev, email: e.target.value }))}
-                    className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                  />
-                  <Button onClick={handleAddParticipant}>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Добавить
-                  </Button>
                 </div>
               </div>
             </div>
           </DrawerBody>
-
-          <DrawerFooter>
-            <div className="flex justify-center gap-4">
-              {currentEvent && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-12 w-12 border-primary/20 hover:bg-red-500/20 text-red-400 hover:text-red-300"
-                  onClick={handleDeleteEvent}
-                  title="Удалить"
-                >
-                  <Trash2 className="h-5 w-5" />
-                  <span className="sr-only">Удалить</span>
-                </Button>
-              )}
-              <Button
-                size="icon"
-                className="h-12 w-12"
-                onClick={handleSaveEvent}
-                title="Сохранить"
-                disabled={!formData.title.trim()}
-              >
-                <Save className="h-5 w-5" />
-                <span className="sr-only">Сохранить</span>
-              </Button>
-            </div>
-          </DrawerFooter>
         </DrawerContent>
       </Drawer>
     </div>

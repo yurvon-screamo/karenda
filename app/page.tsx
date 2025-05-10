@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 import { CalendarEvent, Task } from "@/lib/types"
 import { LocalCalendarStorage } from "@/lib/storage"
 import { notificationUtils } from "@/lib/notifications"
+import { CalendarRepository } from "@/lib/calendar-repository"
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -16,17 +17,13 @@ export default function Home() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const { toast } = useToast()
-  const storage = new LocalCalendarStorage()
+  const calendarRepo = CalendarRepository.getInstance()
 
   useEffect(() => {
     const loadEvents = async () => {
       try {
-        const savedEvents = await storage.getEvents()
-        if (savedEvents.length === 0) {
-
-        } else {
-          setCalendarEvents(savedEvents)
-        }
+        const events = await calendarRepo.getEvents()
+        setCalendarEvents(events)
       } catch (error) {
         console.error('Ошибка при загрузке событий:', error)
         toast({
@@ -43,7 +40,7 @@ export default function Home() {
   useEffect(() => {
     const saveEvents = async () => {
       try {
-        await storage.saveEvents(calendarEvents)
+        await calendarRepo.saveEvents(calendarEvents)
       } catch (error) {
         console.error('Ошибка при сохранении событий:', error)
         toast({
@@ -60,116 +57,143 @@ export default function Home() {
 
   // Обработчик перетаскивания события на другой день
   const handleEventDroppedOnDay = async (event: CalendarEvent, targetDate: Date) => {
-    // Обновляем список событий
-    const updatedEvents = calendarEvents.map((evt) => {
-      if (evt.id === event.id) {
-        // Получаем время из исходного события
-        const [hours, minutes] = evt.time.split(":").map(Number)
+    try {
+      // Получаем время из исходного события
+      const [hours, minutes] = event.time.split(":").map(Number)
 
-        // Создаем новую дату, сохраняя время
-        const newDate = new Date(targetDate)
-        newDate.setHours(hours, minutes)
+      // Создаем новую дату, сохраняя время
+      const newDate = new Date(targetDate)
+      newDate.setHours(hours, minutes)
 
-        return {
-          ...evt,
-          date: newDate.toISOString(),
-        }
+      // Обновляем событие
+      const updatedEvent = {
+        ...event,
+        date: newDate.toISOString(),
       }
-      return evt
-    })
 
-    // Обновляем список событий
-    setCalendarEvents(updatedEvents)
+      // Обновляем список событий
+      const events = await calendarRepo.getEvents()
+      const index = events.findIndex(e => e.id === updatedEvent.id)
+      if (index !== -1) {
+        events[index] = updatedEvent
+        await calendarRepo.saveEvents(events)
+        setCalendarEvents(events)
+      }
 
-    // Показываем уведомление об успешном перемещении
-    const monthNames = [
-      "Января",
-      "Февраля",
-      "Марта",
-      "Апреля",
-      "Мая",
-      "Июня",
-      "Июля",
-      "Августа",
-      "Сентября",
-      "Октября",
-      "Ноября",
-      "Декабря",
-    ]
+      // Показываем уведомление об успешном перемещении
+      const monthNames = [
+        "Января", "Февраля", "Марта", "Апреля", "Мая", "Июня",
+        "Июля", "Августа", "Сентября", "Октября", "Ноября", "Декабря",
+      ]
 
-    toast({
-      title: "Событие перемещено",
-      description: `Событие "${event.title}" перемещено на ${targetDate.getDate()} ${monthNames[targetDate.getMonth()]}`,
-    })
+      toast({
+        title: "Событие перемещено",
+        description: `Событие "${event.title}" перемещено на ${targetDate.getDate()} ${monthNames[targetDate.getMonth()]}`,
+      })
 
-    // Сбрасываем состояние перетаскивания
-    setDraggedEvent(null)
+      // Сбрасываем состояние перетаскивания
+      setDraggedEvent(null)
 
-    // Обновляем выбранную дату на целевую
-    setSelectedDate(targetDate)
+      // Обновляем выбранную дату на целевую
+      setSelectedDate(targetDate)
+    } catch (error) {
+      console.error('Ошибка при перемещении события:', error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось переместить событие",
+        variant: "destructive",
+      })
+    }
   }
 
   // Обработчик обновления времени события внутри дня
   const handleUpdateEventTime = async (event: CalendarEvent, newHour: number, newMinute: number) => {
-    // Обновляем время события
-    const updatedEvents = calendarEvents.map((evt) => {
-      if (evt.id === event.id) {
-        const newTime = `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`
+    try {
+      const newTime = `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`
 
-        // Обновляем дату события
-        const eventDate = new Date(evt.date)
-        eventDate.setHours(newHour, newMinute)
+      // Обновляем дату события
+      const eventDate = new Date(event.date)
+      eventDate.setHours(newHour, newMinute)
 
-        return {
-          ...evt,
-          time: newTime,
-          date: eventDate.toISOString(),
-        }
+      const updatedEvent = {
+        ...event,
+        time: newTime,
+        date: eventDate.toISOString(),
       }
-      return evt
-    })
 
-    // Обновляем список событий
-    setCalendarEvents(updatedEvents)
+      // Обновляем список событий
+      const events = await calendarRepo.getEvents()
+      const index = events.findIndex(e => e.id === updatedEvent.id)
+      if (index !== -1) {
+        events[index] = updatedEvent
+        await calendarRepo.saveEvents(events)
+        setCalendarEvents(events)
+      }
+    } catch (error) {
+      console.error('Ошибка при обновлении времени события:', error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить время события",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleConvertTaskToEvent = async (task: Task, hour: number, minute: number) => {
-    const eventDate = new Date(selectedDate)
-    eventDate.setHours(hour, minute, 0, 0)
+    try {
+      const eventDate = new Date(selectedDate)
+      eventDate.setHours(hour, minute, 0, 0)
 
-    const newEvent: CalendarEvent = {
-      id: `task-to-event-${task.id}-${Date.now()}`,
-      title: task.title,
-      date: eventDate.toISOString(),
-      time: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
-      duration: 60, // По умолчанию 1 час
-      description: task.description || "",
-      priority: task.priority,
-      source: "task",
-      participants: []
+      const newEvent: CalendarEvent = {
+        id: `task-to-event-${task.id}-${Date.now()}`,
+        title: task.title,
+        date: eventDate.toISOString(),
+        time: `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
+        duration: 60, // По умолчанию 1 час
+        description: task.description || "",
+        priority: task.priority,
+        source: "task",
+        participants: []
+      }
+
+      // Добавляем новое событие
+      const events = await calendarRepo.getEvents()
+      events.push(newEvent)
+      await calendarRepo.saveEvents(events)
+      setCalendarEvents(events)
+
+      // Удаляем задачу
+      const updatedTasks = tasks.filter((t) => t.id !== task.id)
+      setTasks(updatedTasks)
+
+      // Показываем уведомление
+      toast({
+        title: "Задача преобразована в событие",
+        description: `Задача "${task.title}" запланирована на ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
+      })
+    } catch (error) {
+      console.error('Ошибка при преобразовании задачи в событие:', error)
+      toast({
+        title: "Ошибка",
+        description: "Не удалось преобразовать задачу в событие",
+        variant: "destructive",
+      })
     }
-
-    // Добавляем новое событие
-    setCalendarEvents([...calendarEvents, newEvent])
-
-    // Удаляем задачу
-    const updatedTasks = tasks.filter((t) => t.id !== task.id)
-    setTasks(updatedTasks)
-
-    // Показываем уведомление
-    toast({
-      title: "Задача преобразована в событие",
-      description: `Задача "${task.title}" запланирована на ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
-    })
   }
 
   // Обработчик добавления новых событий при синхронизации
   const handleSyncComplete = async (syncedEvents: CalendarEvent[]) => {
-    // Объединяем с существующими событиями, исключая дубликаты
-    const existingIds = new Set(calendarEvents.map((e) => e.id))
-    const newEvents = syncedEvents.filter((e) => !existingIds.has(e.id))
-
-    setCalendarEvents([...calendarEvents, ...newEvents])
+    try {
+      const events = await calendarRepo.syncEvents(syncedEvents)
+      setCalendarEvents(events)
+    } catch (error) {
+      console.error('Ошибка при синхронизации:', error)
+      toast({
+        title: "Ошибка синхронизации",
+        description: "Не удалось синхронизировать события",
+        variant: "destructive",
+      })
+    }
   }
 
   // Генерация повторяющихся событий

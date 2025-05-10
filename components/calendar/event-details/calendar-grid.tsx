@@ -78,12 +78,10 @@ export function CalendarGrid({
                                     "absolute text-left px-1.5 py-0.5 rounded transition-all mb-0.5 group shadow-lg",
                                     "bg-primary/10 hover:bg-primary/15",
                                     event.source === "outlook" && "border-l-4 border-blue-500",
-                                    event.source === "caldav" && "border-l-4 border-green-500",
-                                    event.source === "external" && "border-l-4 border-purple-500",
-                                    event.fromTask && "border-l-4 border-green-500",
+                                    event.source === "caldav" && "border-l-4 border-purple-500",
                                     event.recurrenceType && "border-r-4 border-r-primary/50",
                                     isPastEvent && "opacity-50 grayscale hover:opacity-70",
-                                    "cursor-grab active:cursor-grabbing pointer-events-auto"
+                                    "cursor-grab active:cursor-grabbing"
                                 )}
                                 style={{
                                     top: `${top}px`,

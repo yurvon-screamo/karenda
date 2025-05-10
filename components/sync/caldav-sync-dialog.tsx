@@ -300,29 +300,11 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
         }
     }
 
-    const handleSaveSettings = () => {
-        const settings: CalendarIntegrationSettings = {
-            protocol: 'caldav' as const,
-            autoSync: true,
-            syncInterval: SYNC_INTERVAL,
-            caldav: {
-                serverUrl: formData.serverUrl,
-                username: formData.username,
-                password: formData.password,
-                calendarId: formData.calendarId,
-            }
-        }
-        if (onSettingsSave) {
-            onSettingsSave(settings)
-        }
-        setIsOpen(false)
-    }
-
     const handleSync = async () => {
         if (!formData.serverUrl || !formData.username || !formData.password || !formData.calendarId) {
             toast({
                 title: "Ошибка",
-                description: "Пожалуйста, заполните все обязательные поля и выберите календарь",
+                description: "Пожалуйста, заполните все обязательные поля",
                 variant: "destructive",
             })
             return
@@ -345,11 +327,13 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
 
             if (onSettingsSave) {
                 onSettingsSave(settings)
+            } else {
+                localStorage.setItem(CALENDAR_SETTINGS_KEY, JSON.stringify(settings))
             }
 
             const now = new Date()
-            const startDate = new Date(now.getFullYear() - 1, 0, 1)
-            const endDate = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59)
+            const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+            const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
             const response = await fetch("/api/caldav-sync", {
                 method: "POST",
@@ -372,7 +356,17 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
                 throw new Error(data.error || "Ошибка синхронизации")
             }
 
-            onSyncComplete(data.events)
+            // Получаем существующие ручные события
+            const manualEventsStr = localStorage.getItem("manualCalendarEvents")
+            const manualEvents: CalendarEvent[] = manualEventsStr ? JSON.parse(manualEventsStr) : []
+
+            // Сохраняем синхронизированные события отдельно
+            localStorage.setItem("syncedCalendarEvents", JSON.stringify(data.events))
+
+            // Объединяем ручные и синхронизированные события
+            const allEvents = [...manualEvents, ...data.events]
+
+            onSyncComplete(allEvents)
 
             toast({
                 title: "Синхронизация завершена",
@@ -384,7 +378,7 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
             console.error("Ошибка синхронизации:", error)
             toast({
                 title: "Ошибка синхронизации",
-                description: error instanceof Error ? error.message : "Произошла ошибка при синхронизации с CalDAV",
+                description: error instanceof Error ? error.message : "Произошла ошибка при синхронизации",
                 variant: "destructive",
             })
         } finally {
