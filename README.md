@@ -1,8 +1,3 @@
-Русклимат
-turbin_y@rusklimat.ru
-28od-4w8m-LAR1@
-https://mail.rusklimat.ru/EWS/Exchange.asmx
-
 <p align="center">
   <img src="karenda.png" alt="Karenda Logo" width="200"/>
 </p>
