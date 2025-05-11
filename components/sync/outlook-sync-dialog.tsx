@@ -204,8 +204,8 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
 
         try {
             const now = new Date()
-            const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-            const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+            const startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+            const endDate = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate())
 
             const response = await fetch("/api/outlook-sync", {
                 method: "POST",
@@ -293,8 +293,8 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
             }
 
             const now = new Date()
-            const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-            const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+            const startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+            const endDate = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate())
 
             const response = await fetch("/api/outlook-sync", {
                 method: "POST",

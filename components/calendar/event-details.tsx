@@ -345,8 +345,22 @@ export function EventDetails({
   }
 
   const handleDrop = async (e: React.DragEvent) => {
-    console.log('Drop event:', { draggedEvent, dragOverSlot })
+    console.log('Drop event:', { draggedEvent, draggedTask, dragOverSlot })
     e.preventDefault()
+
+    if (draggedTask && dragOverSlot !== null) {
+      const slotMinutes = dragOverSlot * 15
+      const hour = Math.floor(slotMinutes / 60)
+      const minute = slotMinutes % 60
+      onConvertTaskToEvent(draggedTask, hour, minute)
+      setDraggedTask(null)
+      setDragOverSlot(null)
+      toast({
+        title: "Задача преобразована в событие",
+        description: `Задача "${draggedTask.title}" запланирована на ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
+      })
+      return
+    }
 
     if (!draggedEvent || dragOverSlot === null) {
       console.log('No dragged event or slot')

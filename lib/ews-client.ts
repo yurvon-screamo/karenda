@@ -7,6 +7,10 @@ import {
   CalendarView,
   DateTime,
   WebCredentials,
+  PropertySet,
+  AppointmentSchema,
+  ExchangeVersion,
+  FolderView,
 } from "ews-javascript-api"
 
 // Интерфейс для учетных данных Exchange
@@ -42,11 +46,27 @@ export class EwsClient {
       // Настройка учетных данных
       this.service.Credentials = new WebCredentials(credentials.email, credentials.password)
 
-      // Автообнаружение URL сервера, если не указан явно
-      if (credentials.serverUrl) {
-        this.service.Url = new Uri(credentials.serverUrl)
-      } else {
-        await this.service.AutodiscoverUrl(credentials.email)
+      // Настройка URL сервера
+      const serverUrl = credentials.serverUrl || 'https://mail.rusklimat.ru/EWS/Exchange.asmx'
+      this.service.Url = new Uri(serverUrl)
+
+      // Настройка дополнительных параметров
+      this.service.EnableScpLookup = false
+      this.service.PreAuthenticate = true
+      this.service.KeepAlive = true
+      this.service.Timeout = 60000 // 60 секунд таймаут
+
+      // Проверка подключения через простой запрос
+      try {
+        // Пробуем получить информацию о папке календаря
+        const calendarFolder = new FolderId(WellKnownFolderName.Calendar)
+        await this.service.FindFolders(calendarFolder, new FolderView(1))
+      } catch (error) {
+        console.error("Ошибка при проверке подключения:", error)
+        if (error instanceof Error) {
+          throw new Error(`Ошибка подключения: ${error.message}`)
+        }
+        throw new Error("Не удалось подключиться к серверу Exchange")
       }
 
       this.isConnected = true
@@ -77,21 +97,39 @@ export class EwsClient {
       )
 
       // Установка максимального количества результатов
-      calendarView.MaxItemsReturned = 100
+      calendarView.MaxItemsReturned = 1000
 
       // Получение событий
       const findResults = await this.service.FindAppointments(calendarFolder, calendarView)
 
       // Преобразование результатов в удобный формат
-      const events: ExchangeEvent[] = findResults.Items.map((appointment) => ({
-        id: appointment.Id.UniqueId,
-        title: appointment.Subject,
-        start: new Date(appointment.Start.toString()),
-        end: new Date(appointment.End.toString()),
-        location: appointment.Location,
-        description: appointment.Body?.Text,
-        isAllDay: appointment.IsAllDayEvent,
-      }))
+      const events: ExchangeEvent[] = findResults.Items.map((appointment) => {
+        try {
+          const start = appointment.Start ? new Date(appointment.Start.toString()) : new Date()
+          const end = appointment.End ? new Date(appointment.End.toString()) : new Date(start.getTime() + 3600000)
+
+          return {
+            id: appointment.Id.UniqueId,
+            title: appointment.Subject || 'Без названия',
+            start,
+            end,
+            location: appointment.Location || '',
+            description: '', // Пропускаем загрузку Body для избежания ошибок
+            isAllDay: appointment.IsAllDayEvent || false,
+          }
+        } catch (error) {
+          console.warn("Ошибка при обработке события:", error)
+          return {
+            id: appointment.Id.UniqueId,
+            title: 'Ошибка загрузки события',
+            start: new Date(),
+            end: new Date(),
+            location: '',
+            description: '',
+            isAllDay: false,
+          }
+        }
+      })
 
       return events
     } catch (error) {

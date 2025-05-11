@@ -308,10 +308,14 @@ export default function Home() {
     })
 
     // Объединяем базовые события с сгенерированными
-    if (generatedEvents.length > 0) {
-      // Фильтруем существующие события, удаляя ранее сгенерированные
-      const filteredEvents = calendarEvents.filter((event) => !event.isGenerated)
-      setCalendarEvents([...filteredEvents, ...generatedEvents])
+    const filteredEvents = calendarEvents.filter((event) => !event.isGenerated)
+    const newEvents = [...filteredEvents, ...generatedEvents]
+    const isSame =
+      newEvents.length === calendarEvents.length &&
+      newEvents.every((e, i) => e.id === calendarEvents[i].id)
+
+    if (!isSame) {
+      setCalendarEvents(newEvents)
     }
   }, [
     calendarEvents
