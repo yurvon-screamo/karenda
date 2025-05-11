@@ -192,11 +192,31 @@ export function EventDetails({
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    // Проверяем, является ли событие синхронизированным
+    if (currentEvent && (currentEvent.source === 'outlook' || currentEvent.source === 'caldav')) {
+      toast({
+        title: "Невозможно редактировать",
+        description: "Синхронизированные события нельзя редактировать",
+        variant: "destructive",
+      })
+      return
+    }
+
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
   const handleSelectChange = (field: string, value: string | number | boolean) => {
+    // Проверяем, является ли событие синхронизированным
+    if (currentEvent && (currentEvent.source === 'outlook' || currentEvent.source === 'caldav')) {
+      toast({
+        title: "Невозможно редактировать",
+        description: "Синхронизированные события нельзя редактировать",
+        variant: "destructive",
+      })
+      return
+    }
+
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -204,10 +224,30 @@ export function EventDetails({
   }
 
   const handleSwitchChange = (name: string, checked: boolean) => {
+    // Проверяем, является ли событие синхронизированным
+    if (currentEvent && (currentEvent.source === 'outlook' || currentEvent.source === 'caldav')) {
+      toast({
+        title: "Невозможно редактировать",
+        description: "Синхронизированные события нельзя редактировать",
+        variant: "destructive",
+      })
+      return
+    }
+
     setFormData(prev => ({ ...prev, [name]: checked }))
   }
 
   const handleSaveEvent = () => {
+    // Проверяем, является ли событие синхронизированным
+    if (currentEvent && (currentEvent.source === 'outlook' || currentEvent.source === 'caldav')) {
+      toast({
+        title: "Невозможно сохранить",
+        description: "Синхронизированные события нельзя редактировать",
+        variant: "destructive",
+      })
+      return
+    }
+
     const [hours, minutes] = formData.time.split(":").map(Number)
     const eventDate = new Date(formData.date)
     eventDate.setHours(hours, minutes, 0, 0)
@@ -256,6 +296,16 @@ export function EventDetails({
 
   const handleDeleteEvent = () => {
     if (!currentEvent) return
+
+    // Проверяем, является ли событие синхронизированным
+    if (currentEvent.source === 'outlook' || currentEvent.source === 'caldav') {
+      toast({
+        title: "Невозможно удалить",
+        description: "Синхронизированные события нельзя удалять",
+        variant: "destructive",
+      })
+      return
+    }
 
     const updatedEvents = events.filter(event => event.id !== currentEvent.id)
     onUpdateEvents(updatedEvents)
@@ -444,6 +494,16 @@ export function EventDetails({
   };
 
   const handleAddParticipant = () => {
+    // Проверяем, является ли событие синхронизированным
+    if (currentEvent && (currentEvent.source === 'outlook' || currentEvent.source === 'caldav')) {
+      toast({
+        title: "Невозможно редактировать",
+        description: "Синхронизированные события нельзя редактировать",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (newParticipant.name && newParticipant.email) {
       setFormData(prev => ({
         ...prev,
@@ -457,6 +517,16 @@ export function EventDetails({
   }
 
   const handleRemoveParticipant = (id: string) => {
+    // Проверяем, является ли событие синхронизированным
+    if (currentEvent && (currentEvent.source === 'outlook' || currentEvent.source === 'caldav')) {
+      toast({
+        title: "Невозможно редактировать",
+        description: "Синхронизированные события нельзя редактировать",
+        variant: "destructive",
+      })
+      return
+    }
+
     setFormData(prev => ({
       ...prev,
       participants: prev.participants.filter(p => p.id !== id)
@@ -577,7 +647,6 @@ export function EventDetails({
                       event.source === "caldav" && "border-l-4 border-purple-500",
                       event.recurrenceType && "border-r-4 border-r-primary/50",
                       isPastEvent && "opacity-50 grayscale hover:opacity-70",
-                      // Добавляем курсор в зависимости от источника события
                       (event.source === "outlook" || event.source === "caldav")
                         ? "cursor-not-allowed"
                         : "cursor-grab active:cursor-grabbing"
@@ -607,24 +676,36 @@ export function EventDetails({
                         <FileText className="h-4 w-4 text-white/60 hover:text-white/80" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className={cn(
-                          "font-medium flex items-center gap-1 truncate text-sm",
-                          height < 30 && "text-xs",
-                          isPastEvent && "line-through text-white/50"
-                        )}>
-                          {event.title}
-                          {event.recurrenceType && <Repeat className="h-3 w-3 text-primary/70 inline-block ml-1 flex-shrink-0" />}
+                        <div className="flex items-center gap-1">
+                          <div className={cn(
+                            "font-medium truncate text-sm",
+                            height < 30 && "text-xs",
+                            isPastEvent && "line-through text-white/50"
+                          )}>
+                            {event.title}
+                          </div>
+                          {event.recurrenceType && <Repeat className="h-3 w-3 text-primary/70 flex-shrink-0" />}
                         </div>
-                        {height >= 30 && (
-                          <>
-                            <div className={cn(
-                              "text-xs text-white/70 truncate",
-                              isPastEvent && "text-white/40"
-                            )}>
-                              {eventUtils.formatTimeWithAmPm(event.time)} - {eventUtils.formatDuration(event.duration || 60)}
-                            </div>
-                          </>
-                        )}
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <div className={cn(
+                            "text-xs text-white/70 truncate",
+                            isPastEvent && "text-white/40"
+                          )}>
+                            {eventUtils.formatTimeWithAmPm(event.time)} - {eventUtils.formatDuration(event.duration || 60)}
+                          </div>
+                          <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-full",
+                            event.source === "outlook" && "bg-blue-500/20 text-blue-400",
+                            event.source === "caldav" && "bg-purple-500/20 text-purple-400",
+                            event.source === "task" && "bg-green-500/20 text-green-400",
+                            !event.source && "bg-primary/20 text-primary/70"
+                          )}>
+                            {event.source === "outlook" && "Outlook"}
+                            {event.source === "caldav" && "CalDAV"}
+                            {event.source === "task" && "Задача"}
+                            {!event.source && "Локальное"}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -693,28 +774,28 @@ export function EventDetails({
                 )}
               </div>
               <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
-                {currentEvent && !(currentEvent.source === "outlook" || currentEvent.source === "caldav") && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 hover:bg-red-500/10"
-                    onClick={handleDeleteEvent}
-                    title="Удалить"
-                  >
-                    <Trash2 className="h-5 w-5 text-red-400" />
-                  </Button>
-                )}
-                {!(currentEvent?.source === "outlook" || currentEvent?.source === "caldav") && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={handleSaveEvent}
-                    title="Сохранить"
-                    disabled={!formData.title.trim()}
-                  >
-                    <Save className="h-5 w-5" />
-                  </Button>
+                {currentEvent && currentEvent.source !== "outlook" && currentEvent.source !== "caldav" && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-red-500/10"
+                      onClick={handleDeleteEvent}
+                      title="Удалить"
+                    >
+                      <Trash2 className="h-5 w-5 text-red-400" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleSaveEvent}
+                      title="Сохранить"
+                      disabled={!formData.title.trim()}
+                    >
+                      <Save className="h-5 w-5" />
+                    </Button>
+                  </>
                 )}
                 <DrawerClose className="h-8 w-8" onClick={handleCloseDrawer} />
               </div>

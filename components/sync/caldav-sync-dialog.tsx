@@ -35,6 +35,11 @@ interface Calendar {
     name: string
 }
 
+interface RawCalendar {
+    id: string;
+    displayName: string;
+}
+
 interface CalDAVSyncDialogProps {
     onSyncComplete: (events: CalendarEvent[]) => void
     onSettingsSave?: (source: CalendarSource) => void
@@ -106,7 +111,12 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
                 throw new Error(data.error || "Ошибка подключения")
             }
 
-            setAvailableCalendars(data.calendars || [])
+            setAvailableCalendars(
+                (data.calendars || []).map((c: RawCalendar) => ({
+                    id: c.id,
+                    name: c.displayName,
+                }))
+            )
             setIsConnectionVerified(true)
             setFormData(prev => ({ ...prev }))
 

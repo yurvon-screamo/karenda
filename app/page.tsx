@@ -133,6 +133,16 @@ export default function Home() {
   // Обработчик обновления времени события внутри дня
   const handleUpdateEventTime = async (event: CalendarEvent, newHour: number, newMinute: number) => {
     try {
+      // Проверяем, является ли событие синхронизированным
+      if (event.source === 'outlook' || event.source === 'caldav') {
+        toast({
+          title: "Невозможно изменить время",
+          description: "Синхронизированные события нельзя редактировать",
+          variant: "destructive",
+        })
+        throw new Error('Событие синхронизировано и не может быть отредактировано')
+      }
+
       console.log('Обновление времени события:', { event, newHour, newMinute })
 
       const newTime = `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`

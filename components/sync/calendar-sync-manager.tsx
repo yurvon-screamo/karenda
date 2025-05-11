@@ -183,22 +183,23 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
       const data = await response.json()
       const events = data.events || []
 
-      // Преобразуем события из формата Outlook в формат приложения
+      // Преобразуем события из формата Outlook в единый формат
       return events.map((event: any) => {
         const startDate = new Date(event.start)
         const endDate = new Date(event.end)
-
+        const duration = Math.round((endDate.getTime() - startDate.getTime()) / 60000)
         return {
           id: `${source.name}-${event.id}-${Date.now()}`,
           title: event.title,
-          date: startDate.toISOString().split('T')[0],
+          date: startDate.toISOString(), // Полная ISO строка
           time: `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`,
           endTime: `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`,
+          duration,
           location: event.location || '',
           description: event.description || '',
           isAllDay: event.isAllDay || false,
           isSynced: true,
-          source: source.name,
+          source: 'outlook' as const,
           participants: event.participants?.map((p: any) => ({
             id: p.id,
             name: p.name,
@@ -257,24 +258,46 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
       const data = await response.json()
       const events = data.events || []
 
-      // Преобразуем события из формата CalDAV в формат приложения
+      // Преобразуем события из формата CalDAV в единый формат
       return events.map((event: any) => {
-        const startDate = new Date(event.start)
-        const endDate = new Date(event.end)
-
+        if (!event || typeof event !== 'object') {
+          console.error("Некорректный формат события:", event)
+          return null
+        }
+        if (!event.date || !event.time) {
+          console.error("Отсутствуют обязательные поля даты в событии:", event)
+          return null
+        }
+        // Создаем объекты дат из date и time
+        const [year, month, day] = event.date.split('-').map(Number)
+        const [hours, minutes] = event.time.split(':').map(Number)
+        const startDate = new Date(year, month - 1, day, hours, minutes)
+        let endDate;
+        let duration;
+        if (event.endTime) {
+          // Если есть endTime, вычисляем endDate и duration
+          const [endHours, endMinutes] = event.endTime.split(':').map(Number)
+          endDate = new Date(year, month - 1, day, endHours, endMinutes)
+          duration = Math.round((endDate.getTime() - startDate.getTime()) / 60000)
+        } else {
+          duration = event.duration || 60
+          endDate = new Date(startDate.getTime() + duration * 60000)
+        }
         return {
           id: `${source.name}-${event.id}-${Date.now()}`,
           title: event.title,
-          date: startDate.toISOString().split('T')[0],
+          date: startDate.toISOString(), // Полная ISO строка
           time: `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`,
           endTime: `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`,
+          duration,
           location: event.location || '',
           description: event.description || '',
           isAllDay: event.isAllDay || false,
           isSynced: true,
-          source: source.name
+          source: 'caldav' as const,
+          participants: event.participants || []
         }
-      })
+      }).filter(Boolean)
     } catch (error) {
       console.error("Ошибка синхронизации с CalDAV:", error)
       throw error
