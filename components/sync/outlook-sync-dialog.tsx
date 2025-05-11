@@ -17,12 +17,12 @@ import {
     DrawerFooter,
     DrawerClose,
 } from "@/components/ui/drawer"
-import { CalendarEvent, CalendarIntegrationSettings } from "@/lib/types"
+import { CalendarEvent, CalendarSource } from "@/lib/types"
 
-const CALENDAR_SETTINGS_KEY = 'calendarIntegrationSettings'
 const SYNC_INTERVAL = 2 // minutes
 
 interface EWSFormData {
+    name: string
     email: string
     password: string
     serverUrl?: string
@@ -30,101 +30,10 @@ interface EWSFormData {
 
 interface OutlookSyncDialogProps {
     onSyncComplete: (events: CalendarEvent[]) => void
-    onSettingsSave?: (settings: CalendarIntegrationSettings) => void
+    onSettingsSave?: (source: CalendarSource) => void
     isOpen?: boolean
     onOpenChange?: (open: boolean) => void
 }
-
-const EWSForm = ({
-    formData,
-    onInputChange,
-    isLoading,
-    onTestConnection,
-    isConnectionVerified
-}: {
-    formData: EWSFormData
-    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    isLoading: boolean
-    onTestConnection: () => void
-    isConnectionVerified: boolean
-}) => (
-    <div className="space-y-4">
-        <div className="space-y-2">
-            <Label htmlFor="email" className="text-white/70">
-                Email
-            </Label>
-            <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="your.email@example.com"
-                value={formData.email}
-                onChange={onInputChange}
-                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                disabled={isConnectionVerified}
-            />
-        </div>
-
-        <div className="space-y-2">
-            <Label htmlFor="password" className="text-white/70">
-                Пароль
-            </Label>
-            <Input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={onInputChange}
-                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                disabled={isConnectionVerified}
-            />
-        </div>
-
-        <div className="space-y-2">
-            <Label htmlFor="serverUrl" className="text-white/70">
-                URL сервера Exchange (необязательно)
-            </Label>
-            <Input
-                id="serverUrl"
-                name="serverUrl"
-                placeholder="https://outlook.office365.com/EWS/Exchange.asmx"
-                value={formData.serverUrl || ""}
-                onChange={onInputChange}
-                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                disabled={isConnectionVerified}
-            />
-            <p className="text-sm text-white/50">
-                Оставьте пустым для автоматического определения
-            </p>
-        </div>
-
-        <div className="flex justify-end">
-            {!isConnectionVerified ? (
-                <Button
-                    onClick={onTestConnection}
-                    disabled={isLoading || !formData.email || !formData.password}
-                    variant="outline"
-                    className="border-primary/20"
-                >
-                    {isLoading ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Проверка подключения...
-                        </>
-                    ) : (
-                        "Проверить подключение"
-                    )}
-                </Button>
-            ) : (
-                <div className="flex items-center gap-2 text-green-500">
-                    <CheckCircle2 className="h-5 w-5" />
-                    <span>Подключение проверено</span>
-                </div>
-            )}
-        </div>
-    </div>
-)
 
 export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: externalIsOpen, onOpenChange }: OutlookSyncDialogProps) {
     const [internalIsOpen, setInternalIsOpen] = useState(false)
@@ -139,55 +48,16 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
     const [isLoading, setIsLoading] = useState(false)
     const [isConnectionVerified, setIsConnectionVerified] = useState(false)
     const [formData, setFormData] = useState<EWSFormData>({
+        name: "",
         email: "",
         password: "",
         serverUrl: "",
     })
     const { toast } = useToast()
 
-    const loadSettings = () => {
-        const settings = localStorage.getItem(CALENDAR_SETTINGS_KEY)
-        if (settings) {
-            try {
-                const data = JSON.parse(settings)
-                if (data.ews) {
-                    setFormData({
-                        email: data.ews.email || "",
-                        password: data.ews.password || "",
-                        serverUrl: data.ews.serverUrl || "",
-                    })
-                }
-            } catch (e) {
-                console.error('Error loading settings:', e)
-            }
-        }
-    }
-
-    const handleOpen = () => {
-        setIsOpen(true)
-        loadSettings()
-    }
-
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target
-        setFormData(prev => {
-            const newData = { ...prev, [name]: value }
-            saveSettings(name, value)
-            return newData
-        })
-    }
-
-    const saveSettings = (name: string, value: string) => {
-        const settings = localStorage.getItem(CALENDAR_SETTINGS_KEY)
-        const currentSettings = settings ? JSON.parse(settings) : {}
-        const updatedSettings = {
-            ...currentSettings,
-            ews: {
-                ...currentSettings.ews,
-                [name]: value
-            }
-        }
-        localStorage.setItem(CALENDAR_SETTINGS_KEY, JSON.stringify(updatedSettings))
+        setFormData(prev => ({ ...prev, [name]: value }))
     }
 
     const handleTestConnection = async () => {
@@ -203,11 +73,7 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
         setIsLoading(true)
 
         try {
-            const now = new Date()
-            const startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
-            const endDate = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate())
-
-            const response = await fetch("/api/outlook-sync", {
+            const response = await fetch("/api/outlook-test", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -216,10 +82,14 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
                     email: formData.email,
                     password: formData.password,
                     serverUrl: formData.serverUrl,
-                    startDate: startDate.toISOString(),
-                    endDate: endDate.toISOString(),
                 }),
             })
+
+            const contentType = response.headers.get("content-type")
+            if (!contentType || !contentType.includes("application/json")) {
+                const errorText = await response.text()
+                throw new Error(`Неверный формат ответа от сервера: ${errorText}`)
+            }
 
             const data = await response.json()
 
@@ -228,16 +98,18 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
             }
 
             setIsConnectionVerified(true)
+            setFormData(prev => ({ ...prev }))
 
             toast({
                 title: "Подключение успешно",
-                description: `Найдено ${data.events.length} событий`,
+                description: "Можно сохранить настройки",
             })
         } catch (error) {
-            console.error("Ошибка при тестировании подключения:", error)
+            console.error("Ошибка при проверке подключения:", error)
+            setIsConnectionVerified(false)
             toast({
                 title: "Ошибка подключения",
-                description: error instanceof Error ? error.message : "Произошла ошибка при подключении",
+                description: error instanceof Error ? error.message : "Не удалось подключиться к серверу",
                 variant: "destructive",
             })
         } finally {
@@ -246,8 +118,19 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
     }
 
     const handleSaveSettings = () => {
-        const settings: CalendarIntegrationSettings = {
-            protocol: 'ews' as const,
+        if (!formData.name || !formData.email || !formData.password) {
+            toast({
+                title: "Ошибка",
+                description: "Пожалуйста, заполните все обязательные поля",
+                variant: "destructive",
+            })
+            return
+        }
+
+        const source: CalendarSource = {
+            id: "", // Will be set by the parent component
+            name: formData.name,
+            protocol: 'ews',
             autoSync: true,
             syncInterval: SYNC_INTERVAL,
             ews: {
@@ -256,8 +139,9 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
                 serverUrl: formData.serverUrl,
             }
         }
+
         if (onSettingsSave) {
-            onSettingsSave(settings)
+            onSettingsSave(source)
         }
         setIsOpen(false)
     }
@@ -275,8 +159,10 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
         setIsLoading(true)
 
         try {
-            const settings = {
-                protocol: 'ews' as const,
+            const source: CalendarSource = {
+                id: "", // Will be set by the parent component
+                name: formData.name,
+                protocol: 'ews',
                 autoSync: true,
                 syncInterval: SYNC_INTERVAL,
                 ews: {
@@ -287,9 +173,7 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
             }
 
             if (onSettingsSave) {
-                onSettingsSave(settings)
-            } else {
-                localStorage.setItem(CALENDAR_SETTINGS_KEY, JSON.stringify(settings))
+                onSettingsSave(source)
             }
 
             const now = new Date()
@@ -316,23 +200,7 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
                 throw new Error(data.error || "Ошибка синхронизации")
             }
 
-            // Получаем существующие ручные события
-            const manualEventsStr = localStorage.getItem("manualCalendarEvents")
-            const manualEvents: CalendarEvent[] = manualEventsStr ? JSON.parse(manualEventsStr) : []
-
-            // Сохраняем синхронизированные события отдельно
-            localStorage.setItem("syncedCalendarEvents", JSON.stringify(data.events))
-
-            // Объединяем ручные и синхронизированные события
-            const allEvents = [...manualEvents, ...data.events]
-
-            onSyncComplete(allEvents)
-
-            toast({
-                title: "Синхронизация завершена",
-                description: `Получено ${data.events.length} событий из Outlook`,
-            })
-
+            onSyncComplete(data.events)
             setIsOpen(false)
         } catch (error) {
             console.error("Ошибка синхронизации:", error)
@@ -346,74 +214,110 @@ export function OutlookSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exte
         }
     }
 
-    const handleReset = () => {
-        setIsConnectionVerified(false)
-        setFormData({
-            email: "",
-            password: "",
-            serverUrl: "",
-        })
-    }
-
     return (
-        <>
-            <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full h-10 w-10 border-primary/20 hover:bg-white/10"
-                onClick={handleOpen}
-                title="Синхронизация с Outlook"
-            >
-                <CalendarDays className="h-5 w-5" />
-                <span className="sr-only">Синхронизация с Outlook</span>
-            </Button>
-
-            <Drawer open={isOpen} onOpenChange={setIsOpen} direction="right">
-                <DrawerContent>
-                    <DrawerHeader>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <CalendarDays className="h-5 w-5 text-primary" />
-                                <DrawerTitle>Синхронизация с Outlook</DrawerTitle>
-                            </div>
-                            <DrawerClose onClick={() => {
-                                setIsOpen(false)
-                                handleReset()
-                            }} />
+        <Drawer open={isOpen} onOpenChange={setIsOpen}>
+            <DrawerContent>
+                <DrawerHeader>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <CalendarDays className="h-5 w-5 text-primary" />
+                            <DrawerTitle>Настройки Outlook</DrawerTitle>
                         </div>
-                    </DrawerHeader>
+                        <DrawerClose onClick={() => setIsOpen(false)} />
+                    </div>
+                </DrawerHeader>
 
-                    <DrawerBody>
-                        <EWSForm
-                            formData={formData}
-                            onInputChange={handleInputChange}
-                            isLoading={isLoading}
-                            onTestConnection={handleTestConnection}
-                            isConnectionVerified={isConnectionVerified}
-                        />
-                    </DrawerBody>
+                <DrawerBody>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Название календаря</Label>
+                            <Input
+                                id="name"
+                                name="name"
+                                value={formData.name}
+                                onChange={handleInputChange}
+                                placeholder="Например: Рабочий календарь"
+                            />
+                        </div>
 
-                    <DrawerFooter>
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input
+                                id="email"
+                                name="email"
+                                type="email"
+                                value={formData.email}
+                                onChange={handleInputChange}
+                                placeholder="user@example.com"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Пароль</Label>
+                            <Input
+                                id="password"
+                                name="password"
+                                type="password"
+                                value={formData.password}
+                                onChange={handleInputChange}
+                                placeholder="••••••••"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="serverUrl">URL сервера (опционально)</Label>
+                            <Input
+                                id="serverUrl"
+                                name="serverUrl"
+                                value={formData.serverUrl}
+                                onChange={handleInputChange}
+                                placeholder="https://outlook.office365.com/EWS/Exchange.asmx"
+                            />
+                        </div>
+                    </div>
+                </DrawerBody>
+
+                <DrawerFooter>
+                    <div className="flex justify-between">
                         <Button
-                            onClick={handleSync}
-                            disabled={isLoading || !isConnectionVerified}
-                            className={cn(
-                                "w-full rounded-full bg-primary hover:bg-primary/80",
-                                !isConnectionVerified ? "opacity-50 cursor-not-allowed" : "",
-                            )}
+                            variant="outline"
+                            onClick={handleTestConnection}
+                            disabled={isLoading || !formData.email || !formData.password}
                         >
                             {isLoading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Синхронизация...
+                                    Проверка...
                                 </>
                             ) : (
-                                "Синхронизировать"
+                                <>
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Проверить подключение
+                                </>
                             )}
                         </Button>
-                    </DrawerFooter>
-                </DrawerContent>
-            </Drawer>
-        </>
+
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setIsOpen(false)}>
+                                Отмена
+                            </Button>
+                            <Button
+                                onClick={handleSaveSettings}
+                                disabled={isLoading || !isConnectionVerified}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Сохранение...
+                                    </>
+                                ) : (
+                                    "Сохранить"
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </DrawerFooter>
+            </DrawerContent>
+        </Drawer>
     )
 }

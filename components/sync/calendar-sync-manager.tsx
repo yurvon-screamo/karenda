@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui"
-import { RefreshCw, CalendarDays, Settings2 } from "lucide-react"
+import { RefreshCw, CalendarDays, Settings2, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { CalDAVSyncDialog } from "./caldav-sync-dialog"
 import { OutlookSyncDialog } from "./outlook-sync-dialog"
@@ -14,51 +14,48 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
-import { CalendarEvent, CalendarIntegrationSettings } from "@/lib/types"
-import { CalendarRepository } from "@/lib/calendar-repository"
+import { CalendarEvent, CalendarIntegrationSettings, CalendarSource } from "@/lib/types"
+import { v4 as uuidv4 } from 'uuid'
 
 interface CalendarSyncManagerProps {
   onSyncComplete: (events: CalendarEvent[]) => void
 }
 
 export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps) {
-  const [settings, setSettings] = useState<CalendarIntegrationSettings | null>(null)
+  const [settings, setSettings] = useState<CalendarIntegrationSettings>({ sources: [] })
   const [isSyncing, setIsSyncing] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [selectedProtocol, setSelectedProtocol] = useState<"ews" | "caldav" | null>(null)
   const { toast } = useToast()
-  const calendarRepo = CalendarRepository.getInstance()
 
   useEffect(() => {
-    const savedSettings = localStorage.getItem("calendarIntegrationSettings")
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings)
-        setSettings(parsedSettings)
-      } catch (e) {
-        console.error("Ошибка при загрузке настроек:", e)
+    if (typeof window !== 'undefined') {
+      const savedSettings = localStorage.getItem("calendarIntegrationSettings")
+      if (savedSettings) {
+        try {
+          const parsedSettings = JSON.parse(savedSettings)
+          setSettings(parsedSettings)
+        } catch (e) {
+          console.error("Ошибка при загрузке настроек:", e)
+        }
       }
     }
   }, [])
 
   const handleOpenSettings = () => {
-    const savedSettings = localStorage.getItem("calendarIntegrationSettings")
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings)
-        if (parsedSettings.protocol) {
-          setSelectedProtocol(parsedSettings.protocol)
-        }
-      } catch (e) {
-        console.error("Ошибка при загрузке настроек:", e)
-      }
-    }
     setIsSettingsOpen(true)
   }
 
-  const handleSaveSettings = (newSettings: CalendarIntegrationSettings) => {
-    setSettings(newSettings)
-    localStorage.setItem("calendarIntegrationSettings", JSON.stringify(newSettings))
+  const handleSaveSettings = (newSource: CalendarSource) => {
+    setSettings(prevSettings => {
+      const updatedSettings = {
+        sources: [...(prevSettings?.sources || []), { ...newSource, id: uuidv4() }]
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem("calendarIntegrationSettings", JSON.stringify(updatedSettings))
+      }
+      return updatedSettings
+    })
   }
 
   const handleCloseSettings = () => {
@@ -67,7 +64,7 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
   }
 
   const handleSync = async () => {
-    if (!settings) {
+    if (settings.sources.length === 0) {
       toast({
         title: "Настройки не найдены",
         description: "Пожалуйста, настройте интеграцию календаря",
@@ -79,18 +76,63 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
     setIsSyncing(true)
 
     try {
-      let syncedEvents: CalendarEvent[] = []
+      let allSyncedEvents: CalendarEvent[] = []
 
-      if (settings.protocol === "ews") {
-        syncedEvents = await syncWithEWS()
-      } else if (settings.protocol === "caldav") {
-        syncedEvents = await syncWithCalDAV()
+      for (const source of settings.sources) {
+        try {
+          let syncedEvents: CalendarEvent[] = []
+
+          if (source.protocol === "ews") {
+            syncedEvents = await syncWithEWS(source)
+          } else if (source.protocol === "caldav") {
+            syncedEvents = await syncWithCalDAV(source)
+          }
+
+          console.log(`События от источника ${source.name}:`, syncedEvents)
+          allSyncedEvents = [...allSyncedEvents, ...syncedEvents]
+        } catch (error) {
+          console.error(`Ошибка синхронизации для источника ${source.name}:`, error)
+          toast({
+            title: `Ошибка синхронизации для ${source.name}`,
+            description: error instanceof Error ? error.message : "Произошла ошибка при синхронизации",
+            variant: "destructive",
+          })
+        }
       }
 
-      const events = await calendarRepo.syncEvents(syncedEvents)
-      onSyncComplete(events)
+      console.log("Все синхронизированные события:", allSyncedEvents)
+
+      // Сохраняем события в localStorage
+      const savedEvents = localStorage.getItem("syncedCalendarEvents") || "[]"
+      const existingEvents = JSON.parse(savedEvents)
+
+      // Объединяем все события
+      const allEvents = [...existingEvents, ...allSyncedEvents]
+
+      // Оставляем только уникальные события, при дублировании берем последнее
+      const uniqueEvents = allEvents.reduce((acc: CalendarEvent[], current: CalendarEvent) => {
+        const existingIndex = acc.findIndex(event =>
+          event.source === current.source &&
+          String(event.id).split('-')[1] === String(current.id).split('-')[1]
+        )
+
+        if (existingIndex === -1) {
+          // Если такого события еще нет, добавляем его
+          acc.push(current)
+        } else {
+          // Если событие уже есть, заменяем его на новое
+          acc[existingIndex] = current
+        }
+
+        return acc
+      }, [])
+
+      localStorage.setItem("syncedCalendarEvents", JSON.stringify(uniqueEvents))
+
+      console.log("События после сохранения:", uniqueEvents)
+      onSyncComplete(uniqueEvents)
     } catch (error) {
-      console.error("Ошибка синхронизации:", error)
+      console.error("Общая ошибка синхронизации:", error)
       toast({
         title: "Ошибка синхронизации",
         description: error instanceof Error ? error.message : "Произошла ошибка при синхронизации",
@@ -101,103 +143,134 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
     }
   }
 
-  // Синхронизация с EWS
-  const syncWithEWS = async (): Promise<CalendarEvent[]> => {
-    if (!settings?.ews?.email || !settings?.ews?.password) {
-      throw new Error("Отсутствуют учетные данные EWS")
-    }
+  const syncWithEWS = async (source: CalendarSource) => {
+    if (!source.ews) throw new Error("Отсутствуют настройки EWS")
 
-    // Получаем текущий месяц для запроса
     const now = new Date()
-    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate())
 
-    // Отправляем запрос на синхронизацию
-    const response = await fetch("/api/outlook-sync", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: settings.ews.email,
-        password: settings.ews.password,
-        serverUrl: settings.ews.serverUrl,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      }),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || "Ошибка синхронизации с EWS")
-    }
-
-    toast({
-      title: "Синхронизация завершена",
-      description: `Получено ${data.events.length} событий из Exchange`,
-    })
-
-    return data.events
-  }
-
-  // Синхронизация с CalDAV
-  const syncWithCalDAV = async (): Promise<CalendarEvent[]> => {
-    if (!settings?.caldav?.serverUrl || !settings?.caldav?.username || !settings?.caldav?.password) {
-      throw new Error("Отсутствуют учетные данные CalDAV")
-    }
-
-    // Получаем текущий месяц для запроса
-    const now = new Date()
-    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-
-    // Отправляем запрос на синхронизацию
-    const response = await fetch("/api/caldav-sync", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        serverUrl: settings.caldav.serverUrl,
-        username: settings.caldav.username,
-        password: settings.caldav.password,
-        calendarId: settings.caldav.calendarId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      }),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || "Ошибка синхронизации с CalDAV")
-    }
-
-    toast({
-      title: "Синхронизация завершена",
-      description: `Получено ${data.events.length} событий из CalDAV`,
-    })
-
-    return data.events
-  }
-
-  // Автоматическая синхронизация при загрузке
-  useEffect(() => {
-    if (settings?.autoSync) {
-      handleSync()
-
-      // Настраиваем интервал синхронизации
-      const interval = setInterval(
-        () => {
-          handleSync()
+    try {
+      const response = await fetch("/api/outlook-sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        settings.syncInterval * 60 * 1000,
-      ) // Преобразуем минуты в миллисекунды
+        body: JSON.stringify({
+          email: source.ews.email,
+          password: source.ews.password,
+          serverUrl: source.ews.serverUrl,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        }),
+      })
 
-      return () => clearInterval(interval)
+      if (!response.ok) {
+        const errorText = await response.text()
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.error || "Ошибка синхронизации с Outlook")
+        } catch (e) {
+          throw new Error(`Ошибка сервера: ${response.status} ${errorText}`)
+        }
+      }
+
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Неверный формат ответа от сервера")
+      }
+
+      const data = await response.json()
+      const events = data.events || []
+
+      // Преобразуем события из формата Outlook в формат приложения
+      return events.map((event: any) => {
+        const startDate = new Date(event.start)
+        const endDate = new Date(event.end)
+
+        return {
+          id: `${source.name}-${event.id}-${Date.now()}`,
+          title: event.title,
+          date: startDate.toISOString().split('T')[0],
+          time: `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`,
+          endTime: `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`,
+          location: event.location || '',
+          description: event.description || '',
+          isAllDay: event.isAllDay || false,
+          isSynced: true,
+          source: source.name
+        }
+      })
+    } catch (error) {
+      console.error("Ошибка синхронизации с Outlook:", error)
+      throw error
     }
-  }, [settings])
+  }
+
+  const syncWithCalDAV = async (source: CalendarSource) => {
+    if (!source.caldav) throw new Error("Отсутствуют настройки CalDAV")
+
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+
+    try {
+      const response = await fetch("/api/caldav-sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          serverUrl: source.caldav.serverUrl,
+          username: source.caldav.username,
+          password: source.caldav.password,
+          calendarId: source.caldav.calendarId,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.error || "Ошибка синхронизации с CalDAV")
+        } catch (e) {
+          throw new Error(`Ошибка сервера: ${response.status} ${errorText}`)
+        }
+      }
+
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Неверный формат ответа от сервера")
+      }
+
+      const data = await response.json()
+      const events = data.events || []
+
+      // Преобразуем события из формата CalDAV в формат приложения
+      return events.map((event: any) => {
+        const startDate = new Date(event.start)
+        const endDate = new Date(event.end)
+
+        return {
+          id: `${source.name}-${event.id}-${Date.now()}`,
+          title: event.title,
+          date: startDate.toISOString().split('T')[0],
+          time: `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`,
+          endTime: `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`,
+          location: event.location || '',
+          description: event.description || '',
+          isAllDay: event.isAllDay || false,
+          isSynced: true,
+          source: source.name
+        }
+      })
+    } catch (error) {
+      console.error("Ошибка синхронизации с CalDAV:", error)
+      throw error
+    }
+  }
 
   return (
     <div className="flex items-center gap-2">
@@ -236,29 +309,58 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
             </div>
           </DrawerHeader>
 
-          <div className="grid grid-cols-2 gap-4 p-6">
-            <Button
-              variant="outline"
-              className={cn(
-                "h-24 flex flex-col items-center justify-center gap-2",
-                selectedProtocol === "caldav" && "border-primary"
-              )}
-              onClick={() => setSelectedProtocol("caldav")}
-            >
-              <CalendarDays className="h-8 w-8" />
-              <span>CalDAV</span>
-            </Button>
-            <Button
-              variant="outline"
-              className={cn(
-                "h-24 flex flex-col items-center justify-center gap-2",
-                selectedProtocol === "ews" && "border-primary"
-              )}
-              onClick={() => setSelectedProtocol("ews")}
-            >
-              <CalendarDays className="h-8 w-8" />
-              <span>Outlook</span>
-            </Button>
+          <div className="p-6">
+            <div className="mb-6">
+              <h3 className="text-lg font-medium mb-4">Источники календаря</h3>
+              {settings?.sources?.map((source) => (
+                <div key={source.id} className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg mb-2">
+                  <div>
+                    <p className="font-medium">{source.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {source.protocol === 'ews' ? 'Outlook' : 'CalDAV'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const updatedSettings = {
+                        sources: settings.sources.filter(s => s.id !== source.id)
+                      }
+                      setSettings(updatedSettings)
+                      localStorage.setItem("calendarIntegrationSettings", JSON.stringify(updatedSettings))
+                    }}
+                  >
+                    Удалить
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Button
+                variant="outline"
+                className={cn(
+                  "h-24 flex flex-col items-center justify-center gap-2",
+                  selectedProtocol === "caldav" && "border-primary"
+                )}
+                onClick={() => setSelectedProtocol("caldav")}
+              >
+                <CalendarDays className="h-8 w-8" />
+                <span>CalDAV</span>
+              </Button>
+              <Button
+                variant="outline"
+                className={cn(
+                  "h-24 flex flex-col items-center justify-center gap-2",
+                  selectedProtocol === "ews" && "border-primary"
+                )}
+                onClick={() => setSelectedProtocol("ews")}
+              >
+                <CalendarDays className="h-8 w-8" />
+                <span>Outlook</span>
+              </Button>
+            </div>
           </div>
         </DrawerContent>
       </Drawer>

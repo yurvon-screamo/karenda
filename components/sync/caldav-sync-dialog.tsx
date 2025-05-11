@@ -18,12 +18,12 @@ import {
     DrawerFooter,
     DrawerClose,
 } from "@/components/ui/drawer"
-import { CalendarEvent, CalendarIntegrationSettings } from "@/lib/types"
+import { CalendarEvent, CalendarSource } from "@/lib/types"
 
-const CALENDAR_SETTINGS_KEY = 'calendarIntegrationSettings'
 const SYNC_INTERVAL = 2 // minutes
 
 interface CalDAVFormData {
+    name: string
     serverUrl: string
     username: string
     password: string
@@ -31,147 +31,16 @@ interface CalDAVFormData {
 }
 
 interface Calendar {
-    url: string
-    displayName: string
     id: string
-}
-
-interface CalDAVResponse {
-    calendars: {
-        url: string
-        displayName?: string
-    }[]
-    events?: CalendarEvent[]
-    error?: string
+    name: string
 }
 
 interface CalDAVSyncDialogProps {
     onSyncComplete: (events: CalendarEvent[]) => void
-    onSettingsSave?: (settings: CalendarIntegrationSettings) => void
+    onSettingsSave?: (source: CalendarSource) => void
     isOpen?: boolean
     onOpenChange?: (open: boolean) => void
 }
-
-const CalDAVForm = ({
-    formData,
-    onInputChange,
-    isLoading,
-    onFetchCalendars,
-    isConnectionVerified
-}: {
-    formData: CalDAVFormData
-    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    isLoading: boolean
-    onFetchCalendars: () => void
-    isConnectionVerified: boolean
-}) => (
-    <div className="space-y-4">
-        <div className="space-y-2">
-            <Label htmlFor="serverUrl" className="text-white/70">
-                URL сервера CalDAV
-            </Label>
-            <Input
-                id="serverUrl"
-                name="serverUrl"
-                placeholder="https://caldav.yandex.ru"
-                value={formData.serverUrl}
-                onChange={onInputChange}
-                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                disabled={isConnectionVerified}
-            />
-        </div>
-
-        <div className="space-y-2">
-            <Label htmlFor="username" className="text-white/70">
-                Имя пользователя
-            </Label>
-            <Input
-                id="username"
-                name="username"
-                placeholder="username"
-                value={formData.username}
-                onChange={onInputChange}
-                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                disabled={isConnectionVerified}
-            />
-            <p className="text-sm text-white/50">
-                Введите полный email адрес Яндекс.Почты. Если включена двухфакторная аутентификация, используйте пароль для приложений
-            </p>
-        </div>
-
-        <div className="space-y-2">
-            <Label htmlFor="password" className="text-white/70">
-                Пароль
-            </Label>
-            <Input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={onInputChange}
-                className="bg-secondary/50 border-primary/20 text-white placeholder:text-white/40"
-                disabled={isConnectionVerified}
-            />
-        </div>
-
-        <div className="flex justify-end">
-            {!isConnectionVerified ? (
-                <Button
-                    onClick={onFetchCalendars}
-                    disabled={isLoading || !formData.serverUrl || !formData.username || !formData.password}
-                    variant="outline"
-                    className="border-primary/20"
-                >
-                    {isLoading ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Проверка подключения...
-                        </>
-                    ) : (
-                        "Проверить подключение"
-                    )}
-                </Button>
-            ) : (
-                <div className="flex items-center gap-2 text-green-500">
-                    <CheckCircle2 className="h-5 w-5" />
-                    <span>Подключение проверено</span>
-                </div>
-            )}
-        </div>
-    </div>
-)
-
-const CalendarSelector = ({
-    calendars,
-    selectedCalendarId,
-    onSelectChange
-}: {
-    calendars: Calendar[]
-    selectedCalendarId: string
-    onSelectChange: (name: string, value: string) => void
-}) => (
-    <div className="space-y-2 mt-4 pt-4 border-t border-primary/10">
-        <Label htmlFor="calendarId" className="text-white/70">
-            Выберите календарь
-        </Label>
-        <Select
-            value={calendars.find(cal => cal.id === selectedCalendarId)?.url || ""}
-            onValueChange={(value) => onSelectChange("calendarId", value)}
-        >
-            <SelectTrigger className="bg-secondary/50 border-primary/20 text-white">
-                <SelectValue placeholder="Выберите календарь" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#1e1a2e] text-white border-primary/20">
-                {calendars.map((cal) => (
-                    <SelectItem key={cal.url} value={cal.url}>
-                        {cal.displayName}
-                    </SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
-    </div>
-)
 
 export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: externalIsOpen, onOpenChange }: CalDAVSyncDialogProps) {
     const [internalIsOpen, setInternalIsOpen] = useState(false)
@@ -186,6 +55,7 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
     const [isLoading, setIsLoading] = useState(false)
     const [isConnectionVerified, setIsConnectionVerified] = useState(false)
     const [formData, setFormData] = useState<CalDAVFormData>({
+        name: "",
         serverUrl: "",
         username: "",
         password: "",
@@ -194,36 +64,12 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
     const [availableCalendars, setAvailableCalendars] = useState<Calendar[]>([])
     const { toast } = useToast()
 
-    const loadSettings = () => {
-        const settings = localStorage.getItem(CALENDAR_SETTINGS_KEY)
-        if (settings) {
-            try {
-                const data = JSON.parse(settings)
-                if (data.caldav) {
-                    setFormData({
-                        serverUrl: data.caldav.serverUrl || "",
-                        username: data.caldav.username || "",
-                        password: data.caldav.password || "",
-                        calendarId: data.caldav.calendarId || "",
-                    })
-                }
-            } catch (e) {
-                console.error('Error loading settings:', e)
-            }
-        }
-    }
-
-    const handleOpen = () => {
-        setIsOpen(true)
-        loadSettings()
-    }
-
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target
         setFormData(x => ({ ...x, [name]: value }))
     }
 
-    const handleFetchCalendars = async () => {
+    const handleTestConnection = async () => {
         if (!formData.serverUrl || !formData.username || !formData.password) {
             toast({
                 title: "Ошибка",
@@ -236,11 +82,7 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
         setIsLoading(true)
 
         try {
-            const now = new Date()
-            const startDate = new Date(now.getFullYear() - 1, 0, 1)
-            const endDate = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59)
-
-            const response = await fetch("/api/caldav-sync", {
+            const response = await fetch("/api/caldav-test", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -249,43 +91,36 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
                     serverUrl: formData.serverUrl,
                     username: formData.username,
                     password: formData.password,
-                    startDate: startDate.toISOString(),
-                    endDate: endDate.toISOString(),
                 }),
             })
 
-            const data: CalDAVResponse = await response.json()
-
-            if (data.error) {
-                throw new Error(data.error)
+            const contentType = response.headers.get("content-type")
+            if (!contentType || !contentType.includes("application/json")) {
+                const errorText = await response.text()
+                throw new Error(`Неверный формат ответа от сервера: ${errorText}`)
             }
 
-            if (!data.calendars || data.calendars.length === 0) {
-                throw new Error("Не найдено доступных календарей")
+            const data = await response.json()
+
+            if (!response.ok) {
+                throw new Error(data.error || "Ошибка подключения")
             }
 
-            const calendars = data.calendars.map(cal => ({
-                url: cal.url,
-                displayName: cal.displayName || "Без названия",
-                id: cal.url
-            }))
-
-            setAvailableCalendars(calendars)
+            setAvailableCalendars(data.calendars || [])
             setIsConnectionVerified(true)
-
-            if (calendars.length === 1) {
-                setFormData(prev => ({ ...prev, calendarId: calendars[0].url }))
-            }
+            setFormData(prev => ({ ...prev }))
 
             toast({
-                title: "Успех",
-                description: "Подключение к календарю установлено",
+                title: "Подключение успешно",
+                description: "Выберите календарь для синхронизации",
             })
         } catch (error) {
-            console.error("Ошибка при получении календарей:", error)
+            console.error("Ошибка при проверке подключения:", error)
+            setIsConnectionVerified(false)
+            setAvailableCalendars([])
             toast({
                 title: "Ошибка подключения",
-                description: error instanceof Error ? error.message : "Произошла ошибка при подключении к серверу CalDAV",
+                description: error instanceof Error ? error.message : "Не удалось подключиться к серверу",
                 variant: "destructive",
             })
         } finally {
@@ -293,11 +128,34 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
         }
     }
 
-    const handleSelectChange = (name: string, value: string) => {
-        const selectedCalendar = availableCalendars.find(cal => cal.url === value);
-        if (selectedCalendar) {
-            setFormData(x => ({ ...x, [name]: selectedCalendar.id }));
+    const handleSaveSettings = () => {
+        if (!formData.name || !formData.serverUrl || !formData.username || !formData.password || !formData.calendarId) {
+            toast({
+                title: "Ошибка",
+                description: "Пожалуйста, заполните все обязательные поля",
+                variant: "destructive",
+            })
+            return
         }
+
+        const source: CalendarSource = {
+            id: "", // Will be set by the parent component
+            name: formData.name,
+            protocol: 'caldav',
+            autoSync: true,
+            syncInterval: SYNC_INTERVAL,
+            caldav: {
+                serverUrl: formData.serverUrl,
+                username: formData.username,
+                password: formData.password,
+                calendarId: formData.calendarId
+            }
+        }
+
+        if (onSettingsSave) {
+            onSettingsSave(source)
+        }
+        setIsOpen(false)
     }
 
     const handleSync = async () => {
@@ -313,8 +171,10 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
         setIsLoading(true)
 
         try {
-            const settings = {
-                protocol: 'caldav' as const,
+            const source: CalendarSource = {
+                id: "", // Will be set by the parent component
+                name: formData.name,
+                protocol: 'caldav',
                 autoSync: true,
                 syncInterval: SYNC_INTERVAL,
                 caldav: {
@@ -326,9 +186,7 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
             }
 
             if (onSettingsSave) {
-                onSettingsSave(settings)
-            } else {
-                localStorage.setItem(CALENDAR_SETTINGS_KEY, JSON.stringify(settings))
+                onSettingsSave(source)
             }
 
             const now = new Date()
@@ -356,23 +214,7 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
                 throw new Error(data.error || "Ошибка синхронизации")
             }
 
-            // Получаем существующие ручные события
-            const manualEventsStr = localStorage.getItem("manualCalendarEvents")
-            const manualEvents: CalendarEvent[] = manualEventsStr ? JSON.parse(manualEventsStr) : []
-
-            // Сохраняем синхронизированные события отдельно
-            localStorage.setItem("syncedCalendarEvents", JSON.stringify(data.events))
-
-            // Объединяем ручные и синхронизированные события
-            const allEvents = [...manualEvents, ...data.events]
-
-            onSyncComplete(allEvents)
-
-            toast({
-                title: "Синхронизация завершена",
-                description: `Получено ${data.events.length} событий из CalDAV`,
-            })
-
+            onSyncComplete(data.events)
             setIsOpen(false)
         } catch (error) {
             console.error("Ошибка синхронизации:", error)
@@ -386,83 +228,130 @@ export function CalDAVSyncDialog({ onSyncComplete, onSettingsSave, isOpen: exter
         }
     }
 
-    const handleReset = () => {
-        setIsConnectionVerified(false)
-        setFormData({
-            serverUrl: "",
-            username: "",
-            password: "",
-            calendarId: "",
-        })
-        setAvailableCalendars([])
-    }
-
     return (
-        <>
-            <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full h-10 w-10 border-primary/20 hover:bg-white/10"
-                onClick={handleOpen}
-                title="Синхронизация с CalDAV"
-            >
-                <CalendarDays className="h-5 w-5" />
-                <span className="sr-only">Синхронизация с CalDAV</span>
-            </Button>
-
-            <Drawer open={isOpen} onOpenChange={setIsOpen} direction="right">
-                <DrawerContent>
-                    <DrawerHeader>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <CalendarDays className="h-5 w-5 text-primary" />
-                                <DrawerTitle>Синхронизация с CalDAV</DrawerTitle>
-                            </div>
-                            <DrawerClose onClick={() => {
-                                setIsOpen(false)
-                                handleReset()
-                            }} />
+        <Drawer open={isOpen} onOpenChange={setIsOpen}>
+            <DrawerContent>
+                <DrawerHeader>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <CalendarDays className="h-5 w-5 text-primary" />
+                            <DrawerTitle>Настройки CalDAV</DrawerTitle>
                         </div>
-                    </DrawerHeader>
+                        <DrawerClose onClick={() => setIsOpen(false)} />
+                    </div>
+                </DrawerHeader>
 
-                    <DrawerBody>
-                        <CalDAVForm
-                            formData={formData}
-                            onInputChange={handleInputChange}
-                            isLoading={isLoading}
-                            onFetchCalendars={handleFetchCalendars}
-                            isConnectionVerified={isConnectionVerified}
-                        />
-                        {availableCalendars.length > 0 && (
-                            <CalendarSelector
-                                calendars={availableCalendars}
-                                selectedCalendarId={formData.calendarId}
-                                onSelectChange={handleSelectChange}
+                <DrawerBody>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Название календаря</Label>
+                            <Input
+                                id="name"
+                                name="name"
+                                value={formData.name}
+                                onChange={handleInputChange}
+                                placeholder="Например: Рабочий календарь"
                             />
-                        )}
-                    </DrawerBody>
+                        </div>
 
-                    <DrawerFooter>
+                        <div className="space-y-2">
+                            <Label htmlFor="serverUrl">URL сервера</Label>
+                            <Input
+                                id="serverUrl"
+                                name="serverUrl"
+                                value={formData.serverUrl}
+                                onChange={handleInputChange}
+                                placeholder="https://calendar.example.com"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="username">Имя пользователя</Label>
+                            <Input
+                                id="username"
+                                name="username"
+                                value={formData.username}
+                                onChange={handleInputChange}
+                                placeholder="user@example.com"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Пароль</Label>
+                            <Input
+                                id="password"
+                                name="password"
+                                type="password"
+                                value={formData.password}
+                                onChange={handleInputChange}
+                                placeholder="••••••••"
+                            />
+                        </div>
+
+                        {isConnectionVerified && (
+                            <div className="space-y-2">
+                                <Label htmlFor="calendarId">Выберите календарь</Label>
+                                <Select
+                                    value={formData.calendarId}
+                                    onValueChange={(value) => setFormData(x => ({ ...x, calendarId: value }))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Выберите календарь" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableCalendars.map((calendar) => (
+                                            <SelectItem key={calendar.id} value={calendar.id}>
+                                                {calendar.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                    </div>
+                </DrawerBody>
+
+                <DrawerFooter>
+                    <div className="flex justify-between">
                         <Button
-                            onClick={handleSync}
-                            disabled={isLoading || !formData.calendarId || !isConnectionVerified}
-                            className={cn(
-                                "w-full rounded-full bg-primary hover:bg-primary/80",
-                                (!formData.calendarId || !isConnectionVerified) ? "opacity-50 cursor-not-allowed" : "",
-                            )}
+                            variant="outline"
+                            onClick={handleTestConnection}
+                            disabled={isLoading || !formData.serverUrl || !formData.username || !formData.password}
                         >
                             {isLoading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Синхронизация...
+                                    Проверка...
                                 </>
                             ) : (
-                                "Синхронизировать"
+                                <>
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Проверить подключение
+                                </>
                             )}
                         </Button>
-                    </DrawerFooter>
-                </DrawerContent>
-            </Drawer>
-        </>
+
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setIsOpen(false)}>
+                                Отмена
+                            </Button>
+                            <Button
+                                onClick={handleSaveSettings}
+                                disabled={isLoading || !isConnectionVerified || !formData.calendarId}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Сохранение...
+                                    </>
+                                ) : (
+                                    "Сохранить"
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </DrawerFooter>
+            </DrawerContent>
+        </Drawer>
     )
 }

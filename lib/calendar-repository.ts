@@ -53,12 +53,57 @@ export class CalendarRepository {
     // Синхронизация событий
     public async syncEvents(syncedEvents: CalendarEvent[]): Promise<CalendarEvent[]> {
         try {
-            const manualEvents = JSON.parse(localStorage.getItem(this.MANUAL_EVENTS_KEY) || '[]')
-            const uniqueSyncedEvents = this.removeDuplicates(syncedEvents)
+            console.log('Получены события для синхронизации:', syncedEvents)
 
-            localStorage.setItem(this.SYNCED_EVENTS_KEY, JSON.stringify(uniqueSyncedEvents))
+            if (!Array.isArray(syncedEvents)) {
+                console.error('syncEvents: получен не массив событий', syncedEvents)
+                throw new Error('Неверный формат данных')
+            }
+
+            // Проверяем формат каждого события
+            const validEvents = syncedEvents.filter(event => {
+                if (!event || typeof event !== 'object') {
+                    console.warn('syncEvents: пропущено неверное событие', event)
+                    return false
+                }
+
+                if (!event.id || !event.title || !event.date || !event.time) {
+                    console.warn('syncEvents: пропущено событие с отсутствующими полями', event)
+                    return false
+                }
+
+                // Проверяем формат даты
+                const date = new Date(event.date)
+                if (isNaN(date.getTime())) {
+                    console.warn('syncEvents: пропущено событие с неверной датой', event)
+                    return false
+                }
+
+                // Проверяем формат времени
+                const timeParts = event.time.split(':')
+                if (timeParts.length !== 2) {
+                    console.warn('syncEvents: пропущено событие с неверным форматом времени', event)
+                    return false
+                }
+
+                const [hours, minutes] = timeParts.map(Number)
+                if (isNaN(hours) || isNaN(minutes)) {
+                    console.warn('syncEvents: пропущено событие с неверными значениями времени', event)
+                    return false
+                }
+
+                return true
+            })
+
+            console.log('Валидные события для синхронизации:', validEvents)
+
+            const manualEvents = await this.getManualEvents()
+            const uniqueSyncedEvents = this.removeDuplicates(validEvents)
+
+            await this.saveSyncedEvents(uniqueSyncedEvents)
 
             const result = this.removeDuplicates([...manualEvents, ...uniqueSyncedEvents])
+            console.log('Итоговый список событий после синхронизации:', result)
             return result
         } catch (error) {
             console.error("Ошибка при синхронизации событий:", error)
@@ -81,20 +126,24 @@ export class CalendarRepository {
     }
 
     private async getManualEvents(): Promise<CalendarEvent[]> {
+        if (typeof window === 'undefined') return []
         const events = localStorage.getItem(this.MANUAL_EVENTS_KEY)
         return events ? JSON.parse(events) : []
     }
 
     private async getSyncedEvents(): Promise<CalendarEvent[]> {
+        if (typeof window === 'undefined') return []
         const events = localStorage.getItem(this.SYNCED_EVENTS_KEY)
         return events ? JSON.parse(events) : []
     }
 
     private async saveManualEvents(events: CalendarEvent[]): Promise<void> {
+        if (typeof window === 'undefined') return
         localStorage.setItem(this.MANUAL_EVENTS_KEY, JSON.stringify(events))
     }
 
     private async saveSyncedEvents(events: CalendarEvent[]): Promise<void> {
+        if (typeof window === 'undefined') return
         localStorage.setItem(this.SYNCED_EVENTS_KEY, JSON.stringify(events))
     }
 } 

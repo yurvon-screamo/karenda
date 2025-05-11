@@ -8,7 +8,6 @@ import { useToast } from "@/hooks/use-toast"
 import { CalendarEvent, Task } from "@/lib/types"
 import { LocalCalendarStorage } from "@/lib/storage"
 import { notificationUtils } from "@/lib/notifications"
-import { CalendarRepository } from "@/lib/calendar-repository"
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -17,13 +16,18 @@ export default function Home() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const { toast } = useToast()
-  const calendarRepo = CalendarRepository.getInstance()
 
   useEffect(() => {
     const loadEvents = async () => {
       try {
-        const events = await calendarRepo.getEvents()
-        setCalendarEvents(events)
+        if (typeof window === 'undefined') return
+
+        const savedEvents = localStorage.getItem("syncedCalendarEvents")
+        if (savedEvents) {
+          const events = JSON.parse(savedEvents)
+          console.log('Загружены события из localStorage:', events)
+          setCalendarEvents(events)
+        }
       } catch (error) {
         console.error('Ошибка при загрузке событий:', error)
         toast({
@@ -40,22 +44,25 @@ export default function Home() {
   useEffect(() => {
     const saveEvents = async () => {
       try {
+        if (typeof window === 'undefined') return
+
         // Проверяем, что события действительно изменились
-        const currentEvents = await calendarRepo.getEvents()
+        const savedEvents = localStorage.getItem("syncedCalendarEvents")
+        const currentEvents = savedEvents ? JSON.parse(savedEvents) : []
         const hasChanges = JSON.stringify(currentEvents) !== JSON.stringify(calendarEvents)
 
         if (hasChanges) {
           console.log('Сохранение изменений в событиях:', {
-            before: currentEvents.map(e => ({ id: e.id, source: e.source })),
-            after: calendarEvents.map(e => ({ id: e.id, source: e.source }))
+            before: currentEvents.map((e: CalendarEvent) => ({ id: e.id, source: e.source })),
+            after: calendarEvents.map((e: CalendarEvent) => ({ id: e.id, source: e.source }))
           })
 
           // Удаляем дубликаты перед сохранением
           const uniqueEvents = calendarEvents.filter((event, index, self) =>
-            index === self.findIndex(e => e.id === event.id)
+            index === self.findIndex((e: CalendarEvent) => e.id === event.id)
           )
 
-          await calendarRepo.saveEvents(uniqueEvents)
+          localStorage.setItem("syncedCalendarEvents", JSON.stringify(uniqueEvents))
         }
       } catch (error) {
         console.error('Ошибка при сохранении событий:', error)
@@ -88,11 +95,12 @@ export default function Home() {
       }
 
       // Обновляем список событий
-      const events = await calendarRepo.getEvents()
-      const index = events.findIndex(e => e.id === updatedEvent.id)
+      const savedEvents = localStorage.getItem("syncedCalendarEvents")
+      const events = savedEvents ? JSON.parse(savedEvents) : []
+      const index = events.findIndex((e: CalendarEvent) => e.id === updatedEvent.id)
       if (index !== -1) {
         events[index] = updatedEvent
-        await calendarRepo.saveEvents(events)
+        localStorage.setItem("syncedCalendarEvents", JSON.stringify(events))
         setCalendarEvents(events)
       }
 
@@ -142,10 +150,11 @@ export default function Home() {
       console.log('Обновленное событие:', updatedEvent)
 
       // Обновляем список событий
-      const events = await calendarRepo.getEvents()
+      const savedEvents = localStorage.getItem("syncedCalendarEvents")
+      const events = savedEvents ? JSON.parse(savedEvents) : []
 
       // Ищем событие, учитывая как оригинальные, так и сгенерированные события
-      const index = events.findIndex(e => {
+      const index = events.findIndex((e: CalendarEvent) => {
         // Проверяем точное совпадение ID
         if (e.id === updatedEvent.id) return true
         // Проверяем, является ли это сгенерированным событием
@@ -155,6 +164,7 @@ export default function Home() {
 
       if (index !== -1) {
         events[index] = updatedEvent
+        localStorage.setItem("syncedCalendarEvents", JSON.stringify(events))
         // Обновляем состояние, что вызовет useEffect для сохранения
         setCalendarEvents(events)
 
@@ -195,8 +205,10 @@ export default function Home() {
       }
 
       // Добавляем новое событие
-      const events = await calendarRepo.getEvents()
+      const savedEvents = localStorage.getItem("syncedCalendarEvents")
+      const events = savedEvents ? JSON.parse(savedEvents) : []
       events.push(newEvent)
+      localStorage.setItem("syncedCalendarEvents", JSON.stringify(events))
       setCalendarEvents(events)
 
       // Удаляем задачу
@@ -221,8 +233,12 @@ export default function Home() {
   // Обработчик добавления новых событий при синхронизации
   const handleSyncComplete = async (syncedEvents: CalendarEvent[]) => {
     try {
-      const events = await calendarRepo.syncEvents(syncedEvents)
-      setCalendarEvents(events)
+      console.log('Получены синхронизированные события:', syncedEvents)
+      setCalendarEvents(syncedEvents)
+      toast({
+        title: "Синхронизация завершена",
+        description: `Синхронизировано ${syncedEvents.length} событий`,
+      })
     } catch (error) {
       console.error('Ошибка при синхронизации:', error)
       toast({

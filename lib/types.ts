@@ -45,7 +45,9 @@ export interface Task {
     date: string
 }
 
-export interface CalendarIntegrationSettings {
+export interface CalendarSource {
+    id: string
+    name: string
     protocol: 'ews' | 'caldav'
     autoSync: boolean
     syncInterval: number
@@ -60,4 +62,8 @@ export interface CalendarIntegrationSettings {
         password: string
         calendarId: string
     }
+}
+
+export interface CalendarIntegrationSettings {
+    sources: CalendarSource[]
 } 
