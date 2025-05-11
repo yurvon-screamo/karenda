@@ -11,6 +11,7 @@ import {
   AppointmentSchema,
   ExchangeVersion,
   FolderView,
+  Attendee,
 } from "ews-javascript-api"
 
 // Интерфейс для учетных данных Exchange
@@ -29,6 +30,14 @@ export interface ExchangeEvent {
   location?: string
   description?: string
   isAllDay: boolean
+  participants?: {
+    id: string
+    name: string
+    email: string
+    status?: string
+    role?: string
+    isOrganizer?: boolean
+  }[]
 }
 
 // Класс для работы с EWS API
@@ -102,24 +111,99 @@ export class EwsClient {
       // Получение событий
       const findResults = await this.service.FindAppointments(calendarFolder, calendarView)
 
-      // Преобразование результатов в удобный формат
-      const events: ExchangeEvent[] = findResults.Items.map((appointment) => {
+      // Загружаем полную информацию о каждом событии
+      const events: ExchangeEvent[] = []
+      for (const appointment of findResults.Items) {
         try {
+          // Загружаем полную информацию о событии
+          const propertySet = new PropertySet(
+            AppointmentSchema.Subject,
+            AppointmentSchema.Start,
+            AppointmentSchema.End,
+            AppointmentSchema.Location,
+            AppointmentSchema.Body,
+            AppointmentSchema.IsAllDayEvent,
+            AppointmentSchema.Organizer,
+            AppointmentSchema.RequiredAttendees,
+            AppointmentSchema.OptionalAttendees
+          )
+
+          // Устанавливаем тип тела сообщения как текст
+          propertySet.RequestedBodyType = 1 // Text
+
+          await appointment.Load(propertySet)
+
           const start = appointment.Start ? new Date(appointment.Start.toString()) : new Date()
           const end = appointment.End ? new Date(appointment.End.toString()) : new Date(start.getTime() + 3600000)
 
-          return {
+          // Обработка участников
+          const participants = []
+
+          // Добавляем организатора
+          if (appointment.Organizer) {
+            console.log('Организатор:', appointment.Organizer)
+            participants.push({
+              id: appointment.Organizer.Address,
+              name: appointment.Organizer.Name || appointment.Organizer.Address,
+              email: appointment.Organizer.Address,
+              isOrganizer: true
+            })
+          }
+
+          // Добавляем участников
+          if (appointment.RequiredAttendees) {
+            const requiredAttendees = appointment.RequiredAttendees as any
+            console.log('Обязательные участники:', requiredAttendees)
+            if (requiredAttendees && requiredAttendees.Items) {
+              console.log('Items обязательных участников:', requiredAttendees.Items)
+              for (const attendee of requiredAttendees.Items) {
+                console.log('Обработка обязательного участника:', attendee)
+                participants.push({
+                  id: attendee.Address,
+                  name: attendee.Name || attendee.Address,
+                  email: attendee.Address,
+                  status: attendee.ResponseType?.toString(),
+                  role: 'REQ-PARTICIPANT',
+                  isOrganizer: false
+                })
+              }
+            }
+          }
+
+          if (appointment.OptionalAttendees) {
+            const optionalAttendees = appointment.OptionalAttendees as any
+            console.log('Необязательные участники:', optionalAttendees)
+            if (optionalAttendees && optionalAttendees.Items) {
+              console.log('Items необязательных участников:', optionalAttendees.Items)
+              for (const attendee of optionalAttendees.Items) {
+                console.log('Обработка необязательного участника:', attendee)
+                participants.push({
+                  id: attendee.Address,
+                  name: attendee.Name || attendee.Address,
+                  email: attendee.Address,
+                  status: attendee.ResponseType?.toString(),
+                  role: 'OPT-PARTICIPANT',
+                  isOrganizer: false
+                })
+              }
+            }
+          }
+
+          console.log('Итоговый список участников:', participants)
+
+          events.push({
             id: appointment.Id.UniqueId,
             title: appointment.Subject || 'Без названия',
             start,
             end,
             location: appointment.Location || '',
-            description: '', // Пропускаем загрузку Body для избежания ошибок
+            description: appointment.Body?.Text || '',
             isAllDay: appointment.IsAllDayEvent || false,
-          }
+            participants
+          })
         } catch (error) {
           console.warn("Ошибка при обработке события:", error)
-          return {
+          events.push({
             id: appointment.Id.UniqueId,
             title: 'Ошибка загрузки события',
             start: new Date(),
@@ -127,9 +211,10 @@ export class EwsClient {
             location: '',
             description: '',
             isAllDay: false,
-          }
+            participants: []
+          })
         }
-      })
+      }
 
       return events
     } catch (error) {

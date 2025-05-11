@@ -198,7 +198,16 @@ export function CalendarSyncManager({ onSyncComplete }: CalendarSyncManagerProps
           description: event.description || '',
           isAllDay: event.isAllDay || false,
           isSynced: true,
-          source: source.name
+          source: source.name,
+          participants: event.participants?.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            status: p.status,
+            role: p.role,
+            isOrganizer: p.isOrganizer,
+            avatar: `https://www.gravatar.com/avatar/${p.email}?d=identicon&s=200`
+          })) || []
         }
       })
     } catch (error) {
